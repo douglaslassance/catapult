@@ -3,7 +3,7 @@
 Shared release pipeline for Swift macOS apps. Builds, signs, notarizes, and
 publishes a .app to:
 
-- a notarized **DMG** on Cloudflare R2 (with optional Sparkle appcast)
+- a notarized **DMG** on S3-compatible storage (e.g. Cloudflare R2), with optional Sparkle appcast
 - a **Homebrew** cask (PR against any tap)
 - the **Mac App Store** (.pkg via App Store Connect)
 
@@ -46,7 +46,7 @@ Add app-specific files at the app repo root:
 ./catapult/scripts/build.sh                # direct distribution (DMG)
 ./catapult/scripts/build-appstore.sh       # App Store .pkg
 ./catapult/scripts/verify-appstore.sh      # post-build sanity checks
-./catapult/scripts/upload.sh               # push DMG/appcast/KV to R2
+./catapult/scripts/upload.sh               # push DMG/appcast/KV to S3
 ./catapult/scripts/upload-appstore.sh      # upload .pkg to App Store Connect
 ./catapult/scripts/push-homebrew.sh        # update tap, optionally --pull-request
 ```
@@ -71,7 +71,7 @@ jobs:
     uses: douglaslassance/catapult/.github/workflows/release.yml@<full-sha>
     secrets: inherit
     with:
-      channels: "direct,homebrew"   # or "direct,appstore,homebrew"
+      channels: "s3,homebrew"   # or "s3,appstore,homebrew"
 ```
 
 ```yaml
@@ -110,7 +110,7 @@ swift_target  = "App"                      # SPM target name (swift only)
 [sparkle]
 feed_url = "https://storage.douglaslassance.me/peel/peel.xml"
 
-[r2]
+[s3]
 bucket_prefix         = "peel"
 appcast_filename      = "peel.xml"
 download_url_template = "https://api.douglaslassance.me/peel/download/{version}/{target}"
@@ -132,11 +132,11 @@ full annotated schema, including optional overrides.
 
 | Channel | Env var (local + CI) | Purpose |
 |---------|----------------------|---------|
-| direct  | `APPLE_SIGNING_IDENTITY` | "Developer ID Application: ..." string |
-| direct  | `NOTARIZATION_KEY`, `NOTARIZATION_KEY_ID`, `NOTARIZATION_ISSUER_ID` | notarytool API key (base64 .p8) |
+| s3      | `APPLE_SIGNING_IDENTITY` | "Developer ID Application: ..." string |
+| s3      | `NOTARIZATION_KEY`, `NOTARIZATION_KEY_ID`, `NOTARIZATION_ISSUER_ID` | notarytool API key (base64 .p8) |
+| s3      | `S3_ACCOUNT_ID`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET_NAME` | S3-compatible bucket credentials |
+| s3      | `S3_PUBLIC_URL`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ZONE_ID`, `CLOUDFLARE_KV_NAMESPACE_ID` | optional: Cloudflare cache purge + KV |
 | sparkle | `SPARKLE_PUBLIC_KEY`, `SPARKLE_PRIVATE_KEY` | EdDSA key pair (private base64) |
-| r2      | `S3_ACCOUNT_ID`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET_NAME` | R2 credentials |
-| r2      | `S3_PUBLIC_URL`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ZONE_ID`, `CLOUDFLARE_KV_NAMESPACE_ID` | optional: cache purge + KV |
 | homebrew | `HOMEBREW_TAP_URL` | tap repo URL (defaults to Homebrew/homebrew-cask) |
 | homebrew | `HOMEBREW_TAP_TOKEN` (CI) → `GITHUB_PERSONAL_ACCESS_TOKEN` (script) | GH token for tap push |
 | appstore (CI) | `APPSTORE_CERT`, `APPSTORE_CERT_PASSWORD` | Apple Distribution cert (base64 .p12) |

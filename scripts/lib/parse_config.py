@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Parse trigger.toml and emit shell `export` statements.
+"""Parse catapult.toml and emit shell `export` statements.
 
 Output convention:
-  - Scalar values become TRIGGER_<SECTION>_<KEY>=<value> (uppercased).
-  - Top-level sections emit TRIGGER_HAS_<SECTION>=1 so scripts can branch
+  - Scalar values become CATAPULT_<SECTION>_<KEY>=<value> (uppercased).
+  - Top-level sections emit CATAPULT_HAS_<SECTION>=1 so scripts can branch
     on channel presence (e.g. [sparkle], [r2], [homebrew], [appstore]).
   - Nested dicts under [plist.usage_descriptions] are intentionally skipped
     here; render_plist.py reads the TOML directly for that.
@@ -17,7 +17,7 @@ try:
     import tomllib
 except ImportError:
     sys.stderr.write(
-        "trigger: tomllib not available — need Python 3.11+ "
+        "catapult: tomllib not available — need Python 3.11+ "
         "(brew install python@3.12)\n"
     )
     sys.exit(1)
@@ -42,23 +42,23 @@ def flatten(d, prefix=()):
 
 
 def main():
-    path = sys.argv[1] if len(sys.argv) > 1 else "trigger.toml"
+    path = sys.argv[1] if len(sys.argv) > 1 else "catapult.toml"
     try:
         with open(path, "rb") as f:
             cfg = tomllib.load(f)
     except FileNotFoundError:
-        sys.stderr.write(f"trigger: {path} not found\n")
+        sys.stderr.write(f"catapult: {path} not found\n")
         sys.exit(1)
     except tomllib.TOMLDecodeError as e:
-        sys.stderr.write(f"trigger: invalid TOML in {path}: {e}\n")
+        sys.stderr.write(f"catapult: invalid TOML in {path}: {e}\n")
         sys.exit(1)
 
     for section, value in cfg.items():
         if isinstance(value, dict):
-            print(f"export TRIGGER_HAS_{section.upper()}=1")
+            print(f"export CATAPULT_HAS_{section.upper()}=1")
 
     for path_parts, value in flatten(cfg):
-        name = "TRIGGER_" + "_".join(p.upper() for p in path_parts)
+        name = "CATAPULT_" + "_".join(p.upper() for p in path_parts)
         print(f"export {name}={shlex.quote(value)}")
 
 

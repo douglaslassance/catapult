@@ -1,6 +1,6 @@
 #!/bin/bash
 # upload.sh — Upload DMG (+ Sparkle appcast + KV metadata) to Cloudflare R2.
-# Requires [r2] section in trigger.toml.
+# Requires [r2] section in catapult.toml.
 #
 # Usage: upload.sh [version]
 
@@ -14,24 +14,24 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/config.sh"
 
-if [ -z "${TRIGGER_HAS_R2:-}" ]; then
-    echo "❌ [r2] section missing from trigger.toml"
+if [ -z "${CATAPULT_HAS_R2:-}" ]; then
+    echo "❌ [r2] section missing from catapult.toml"
     exit 1
 fi
 
-cd "$TRIGGER_APP_ROOT"
+cd "$CATAPULT_APP_ROOT"
 
 VERSION="${1:-$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")}"
-APP_NAME="$TRIGGER_APP_NAME"
-SLUG="$TRIGGER_APP_SLUG"
-TARGET="$TRIGGER_BUILD_TARGET_TRIPLE"
-DIST_DIR="$TRIGGER_DIST_DIR"
+APP_NAME="$CATAPULT_APP_NAME"
+SLUG="$CATAPULT_APP_SLUG"
+TARGET="$CATAPULT_BUILD_TARGET_TRIPLE"
+DIST_DIR="$CATAPULT_DIST_DIR"
 DMG_FILE="${SLUG}-${VERSION}-${TARGET}.dmg"
 
-BUCKET_PREFIX="${TRIGGER_R2_BUCKET_PREFIX:-$SLUG}"
-APPCAST_FILE_NAME="${TRIGGER_R2_APPCAST_FILENAME:-${SLUG}.xml}"
+BUCKET_PREFIX="${CATAPULT_R2_BUCKET_PREFIX:-$SLUG}"
+APPCAST_FILE_NAME="${CATAPULT_R2_APPCAST_FILENAME:-${SLUG}.xml}"
 # Template uses {version} and {target} placeholders.
-DOWNLOAD_URL_TEMPLATE="${TRIGGER_R2_DOWNLOAD_URL_TEMPLATE:?r2.download_url_template required}"
+DOWNLOAD_URL_TEMPLATE="${CATAPULT_R2_DOWNLOAD_URL_TEMPLATE:?r2.download_url_template required}"
 
 if [ ! -f "${DIST_DIR}/${DMG_FILE}" ]; then
     echo "❌ ${DIST_DIR}/${DMG_FILE} not found — run build.sh first"
@@ -73,7 +73,7 @@ echo ""
 IS_PRERELEASE=$(echo "$VERSION" | grep -qiE '(alpha|beta|rc|pre|dev)' && echo 1 || echo 0)
 
 # Sparkle appcast
-if [ -n "${TRIGGER_HAS_SPARKLE:-}" ]; then
+if [ -n "${CATAPULT_HAS_SPARKLE:-}" ]; then
     if [ "$IS_PRERELEASE" = "1" ]; then
         echo "⚠️  Skipping appcast update (pre-release: $VERSION)"
         echo ""
@@ -98,7 +98,7 @@ if [ -n "${TRIGGER_HAS_SPARKLE:-}" ]; then
             <title>Version ${VERSION}</title>
             <pubDate>${PUB_DATE}</pubDate>
             <sparkle:version>${VERSION}</sparkle:version>
-            <sparkle:minimumSystemVersion>${TRIGGER_APP_MIN_MACOS}</sparkle:minimumSystemVersion>
+            <sparkle:minimumSystemVersion>${CATAPULT_APP_MIN_MACOS}</sparkle:minimumSystemVersion>
             <enclosure
                 url="${DOWNLOAD_URL}"
                 sparkle:edSignature="${ED_SIG}"
@@ -137,7 +137,7 @@ elif [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${S3_ACCOUNT_ID:-}" ] || [ -z "
     echo "⚠️  Skipping KV update (CLOUDFLARE_API_TOKEN, S3_ACCOUNT_ID, or CLOUDFLARE_KV_NAMESPACE_ID not set)"
     echo ""
 else
-    KV_KEY="${TRIGGER_R2_KV_KEY:-$SLUG}"
+    KV_KEY="${CATAPULT_R2_KV_KEY:-$SLUG}"
     KV_URL="https://api.cloudflare.com/client/v4/accounts/${S3_ACCOUNT_ID}/storage/kv/namespaces/${CLOUDFLARE_KV_NAMESPACE_ID}/values/${KV_KEY}"
 
     CURRENT_KV=$(curl -s -X GET "$KV_URL" -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" 2>/dev/null)

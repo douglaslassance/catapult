@@ -1,29 +1,29 @@
 #!/bin/bash
-# Generate $TRIGGER_BUILD_DIR/AppIcon.icns.
+# Generate $CATAPULT_BUILD_DIR/AppIcon.icns.
 #
 # Three sources, in order of priority:
-#   1. If $TRIGGER_BUILD_DIR/AppIcon.icns already exists, do nothing.
-#   2. If $TRIGGER_BUILD_ICON_COMMAND is set, run it and expect it to
-#      produce $TRIGGER_BUILD_DIR/AppIcon.icns. (Use this for apps that
+#   1. If $CATAPULT_BUILD_DIR/AppIcon.icns already exists, do nothing.
+#   2. If $CATAPULT_BUILD_ICON_COMMAND is set, run it and expect it to
+#      produce $CATAPULT_BUILD_DIR/AppIcon.icns. (Use this for apps that
 #      render their icon programmatically, e.g. from an SF Symbol via
 #      a Swift script.)
-#   3. Otherwise, sips/iconutil from $TRIGGER_BUILD_ICON (a single PNG).
+#   3. Otherwise, sips/iconutil from $CATAPULT_BUILD_ICON (a single PNG).
 
 set -e
 
-: "${TRIGGER_BUILD_DIR:?}"
-mkdir -p "$TRIGGER_BUILD_DIR"
+: "${CATAPULT_BUILD_DIR:?}"
+mkdir -p "$CATAPULT_BUILD_DIR"
 
-OUT="$TRIGGER_BUILD_DIR/AppIcon.icns"
+OUT="$CATAPULT_BUILD_DIR/AppIcon.icns"
 
 if [ -f "$OUT" ]; then
     echo "ℹ️  $OUT already exists, skipping"
     exit 0
 fi
 
-if [ -n "${TRIGGER_BUILD_ICON_COMMAND:-}" ]; then
-    echo "🎨 Running icon command: $TRIGGER_BUILD_ICON_COMMAND"
-    eval "$TRIGGER_BUILD_ICON_COMMAND"
+if [ -n "${CATAPULT_BUILD_ICON_COMMAND:-}" ]; then
+    echo "🎨 Running icon command: $CATAPULT_BUILD_ICON_COMMAND"
+    eval "$CATAPULT_BUILD_ICON_COMMAND"
     if [ ! -f "$OUT" ]; then
         echo "❌ icon command did not produce $OUT"
         exit 1
@@ -32,26 +32,26 @@ if [ -n "${TRIGGER_BUILD_ICON_COMMAND:-}" ]; then
     exit 0
 fi
 
-: "${TRIGGER_BUILD_ICON:?}"
-if [ ! -f "$TRIGGER_BUILD_ICON" ]; then
-    echo "❌ Icon source not found: $TRIGGER_BUILD_ICON"
+: "${CATAPULT_BUILD_ICON:?}"
+if [ ! -f "$CATAPULT_BUILD_ICON" ]; then
+    echo "❌ Icon source not found: $CATAPULT_BUILD_ICON"
     echo "   Set [build] icon = \"path/to/AppIcon.png\" or [build] icon_command = \"...\""
     exit 1
 fi
 
-ICONSET="$TRIGGER_BUILD_DIR/icon.iconset"
+ICONSET="$CATAPULT_BUILD_DIR/icon.iconset"
 mkdir -p "$ICONSET"
 
-sips -z 16 16     "$TRIGGER_BUILD_ICON" --out "$ICONSET/icon_16x16.png"
-sips -z 32 32     "$TRIGGER_BUILD_ICON" --out "$ICONSET/icon_16x16@2x.png"
-sips -z 32 32     "$TRIGGER_BUILD_ICON" --out "$ICONSET/icon_32x32.png"
-sips -z 64 64     "$TRIGGER_BUILD_ICON" --out "$ICONSET/icon_32x32@2x.png"
-sips -z 128 128   "$TRIGGER_BUILD_ICON" --out "$ICONSET/icon_128x128.png"
-sips -z 256 256   "$TRIGGER_BUILD_ICON" --out "$ICONSET/icon_128x128@2x.png"
-sips -z 256 256   "$TRIGGER_BUILD_ICON" --out "$ICONSET/icon_256x256.png"
-sips -z 512 512   "$TRIGGER_BUILD_ICON" --out "$ICONSET/icon_256x256@2x.png"
-sips -z 512 512   "$TRIGGER_BUILD_ICON" --out "$ICONSET/icon_512x512.png"
-sips -z 1024 1024 "$TRIGGER_BUILD_ICON" --out "$ICONSET/icon_512x512@2x.png"
+sips -z 16 16     "$CATAPULT_BUILD_ICON" --out "$ICONSET/icon_16x16.png"
+sips -z 32 32     "$CATAPULT_BUILD_ICON" --out "$ICONSET/icon_16x16@2x.png"
+sips -z 32 32     "$CATAPULT_BUILD_ICON" --out "$ICONSET/icon_32x32.png"
+sips -z 64 64     "$CATAPULT_BUILD_ICON" --out "$ICONSET/icon_32x32@2x.png"
+sips -z 128 128   "$CATAPULT_BUILD_ICON" --out "$ICONSET/icon_128x128.png"
+sips -z 256 256   "$CATAPULT_BUILD_ICON" --out "$ICONSET/icon_128x128@2x.png"
+sips -z 256 256   "$CATAPULT_BUILD_ICON" --out "$ICONSET/icon_256x256.png"
+sips -z 512 512   "$CATAPULT_BUILD_ICON" --out "$ICONSET/icon_256x256@2x.png"
+sips -z 512 512   "$CATAPULT_BUILD_ICON" --out "$ICONSET/icon_512x512.png"
+sips -z 1024 1024 "$CATAPULT_BUILD_ICON" --out "$ICONSET/icon_512x512@2x.png"
 
 iconutil -c icns "$ICONSET" -o "$OUT"
 echo "✅ AppIcon.icns generated"

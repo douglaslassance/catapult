@@ -1,6 +1,6 @@
 #!/bin/bash
 # push-homebrew.sh — Update a Homebrew cask in a tap and optionally open a PR.
-# Requires [homebrew] section in trigger.toml and a cask.rb template in the app
+# Requires [homebrew] section in catapult.toml and a cask.rb template in the app
 # repo root (or pointed to via homebrew.cask_template).
 #
 # Usage: push-homebrew.sh [--pull-request] [version]
@@ -23,24 +23,24 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/config.sh"
 
-if [ -z "${TRIGGER_HAS_HOMEBREW:-}" ]; then
-    echo "❌ [homebrew] section missing from trigger.toml"
+if [ -z "${CATAPULT_HAS_HOMEBREW:-}" ]; then
+    echo "❌ [homebrew] section missing from catapult.toml"
     exit 1
 fi
 
-cd "$TRIGGER_APP_ROOT"
+cd "$CATAPULT_APP_ROOT"
 
 export GH_TOKEN="${GITHUB_PERSONAL_ACCESS_TOKEN:-${GH_TOKEN:-}}"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; BLUE='\033[0;34m'; NC='\033[0m'
 
-APP_NAME="$TRIGGER_APP_NAME"
-SLUG="$TRIGGER_APP_SLUG"
-TARGET="$TRIGGER_BUILD_TARGET_TRIPLE"
-DIST_DIR="$TRIGGER_DIST_DIR"
+APP_NAME="$CATAPULT_APP_NAME"
+SLUG="$CATAPULT_APP_SLUG"
+TARGET="$CATAPULT_BUILD_TARGET_TRIPLE"
+DIST_DIR="$CATAPULT_DIST_DIR"
 
-BREW_NAME="${TRIGGER_HOMEBREW_CASK_NAME:-$SLUG}"
-CASK_TEMPLATE="${TRIGGER_HOMEBREW_CASK_TEMPLATE:-${TRIGGER_APP_ROOT}/cask.rb}"
+BREW_NAME="${CATAPULT_HOMEBREW_CASK_NAME:-$SLUG}"
+CASK_TEMPLATE="${CATAPULT_HOMEBREW_CASK_TEMPLATE:-${CATAPULT_APP_ROOT}/cask.rb}"
 if [ ! -f "$CASK_TEMPLATE" ]; then
     echo "❌ Cask template not found: $CASK_TEMPLATE"
     exit 1
@@ -72,7 +72,7 @@ echo -e "${BLUE}🍺 Updating Homebrew cask for ${APP_NAME} v${VERSION}${NC}"
 echo ""
 
 # Clone/update tap in sibling dir
-APP_DIR_NAME=$(basename "$TRIGGER_APP_ROOT")
+APP_DIR_NAME=$(basename "$CATAPULT_APP_ROOT")
 cd ..
 if [ -d "$HOMEBREW_DIR" ]; then
     cd "$HOMEBREW_DIR"
@@ -156,7 +156,7 @@ if [ "$PULL_REQUEST" = true ]; then
         PR_HEAD="$BRANCH"
     fi
 
-    DOWNLOAD_URL_TEMPLATE="${TRIGGER_R2_DOWNLOAD_URL_TEMPLATE:-}"
+    DOWNLOAD_URL_TEMPLATE="${CATAPULT_R2_DOWNLOAD_URL_TEMPLATE:-}"
     if [ -n "$DOWNLOAD_URL_TEMPLATE" ]; then
         DMG_URL="${DOWNLOAD_URL_TEMPLATE//\{version\}/$VERSION}"
         DMG_URL="${DMG_URL//\{target\}/$TARGET}"

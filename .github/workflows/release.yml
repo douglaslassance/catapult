@@ -1,7 +1,7 @@
-name: Release (trigger)
+name: Release (catapult)
 
 # Reusable release workflow. Apps invoke this from their own .github/workflows/
-# with `uses: douglaslassance/trigger/.github/workflows/release.yml@<tag>`.
+# with `uses: douglaslassance/catapult/.github/workflows/release.yml@<tag>`.
 #
 # The calling workflow must `secrets: inherit` (or pass each secret explicitly).
 
@@ -74,7 +74,7 @@ jobs:
           NOTARIZATION_ISSUER_ID: ${{ secrets.NOTARIZATION_ISSUER_ID }}
           SPARKLE_PUBLIC_KEY: ${{ secrets.SPARKLE_PUBLIC_KEY }}
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
-        run: ./trigger/scripts/build.sh "${{ steps.ver.outputs.version }}"
+        run: ./catapult/scripts/build.sh "${{ steps.ver.outputs.version }}"
 
       - name: Upload to R2
         env:
@@ -87,8 +87,8 @@ jobs:
           CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
           CLOUDFLARE_KV_NAMESPACE_ID: ${{ secrets.CLOUDFLARE_KV_NAMESPACE_ID }}
         run: |
-          if grep -q '^\[r2\]' trigger.toml; then
-            ./trigger/scripts/upload.sh "${{ steps.ver.outputs.version }}"
+          if grep -q '^\[r2\]' catapult.toml; then
+            ./catapult/scripts/upload.sh "${{ steps.ver.outputs.version }}"
           else
             echo "No [r2] section — skipping upload"
           fi
@@ -133,7 +133,7 @@ jobs:
           # GitHub forbids the GITHUB_ prefix in secret names; rename HOMEBREW_TAP_TOKEN.
           GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           HOMEBREW_TAP_URL: ${{ secrets.HOMEBREW_TAP_URL }}
-        run: ./trigger/scripts/push-homebrew.sh --pull-request "${{ steps.ver.outputs.version }}"
+        run: ./catapult/scripts/push-homebrew.sh --pull-request "${{ steps.ver.outputs.version }}"
 
   appstore:
     if: contains(inputs.channels, 'appstore')
@@ -187,15 +187,15 @@ jobs:
           # Provisioning profile
           PP_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
           mkdir -p "$PP_DIR"
-          PROFILE_NAME=$(python3 -c "import tomllib; cfg = tomllib.load(open('trigger.toml','rb')); pp = cfg.get('build', {}).get('provisioning_profile') or f\"{cfg['app']['name']}.provisionprofile\"; print(pp.split('/')[-1])")
+          PROFILE_NAME=$(python3 -c "import tomllib; cfg = tomllib.load(open('catapult.toml','rb')); pp = cfg.get('build', {}).get('provisioning_profile') or f\"{cfg['app']['name']}.provisionprofile\"; print(pp.split('/')[-1])")
           echo "$PROVISIONING_PROFILE_B64" | base64 --decode > "$PP_DIR/$PROFILE_NAME"
 
       - name: Build for App Store
-        run: ./trigger/scripts/build-appstore.sh "${{ steps.ver.outputs.version }}"
+        run: ./catapult/scripts/build-appstore.sh "${{ steps.ver.outputs.version }}"
 
       - name: Upload to App Store Connect
         env:
           NOTARIZATION_KEY: ${{ secrets.NOTARIZATION_KEY }}
           NOTARIZATION_KEY_ID: ${{ secrets.NOTARIZATION_KEY_ID }}
           NOTARIZATION_ISSUER_ID: ${{ secrets.NOTARIZATION_ISSUER_ID }}
-        run: ./trigger/scripts/upload-appstore.sh "${{ steps.ver.outputs.version }}"
+        run: ./catapult/scripts/upload-appstore.sh "${{ steps.ver.outputs.version }}"

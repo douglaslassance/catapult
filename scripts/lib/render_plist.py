@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """Render Info.plist files for direct distribution or App Store builds.
 
-Reads trigger.toml directly (not env vars) so it can handle the nested
-[plist.usage_descriptions] table without flattening.
+Two modes:
+  - Generated (default): build the plist from trigger.toml fields.
+  - Passthrough: `[plist] template = "Info.plist"` — read the app's committed
+    plist as the base, inject version + signing/sparkle/appstore keys, and
+    preserve every other key (document types, UTI declarations, etc.).
 
 Usage:
   render_plist.py <config> --kind direct|appstore|resource \\
                   --version <v> --build-number <n> [--out <path>]
-
-For --kind resource, only --config and --version are required.
 """
 import argparse
 import os
+import plistlib
 import sys
 
 try:
@@ -30,22 +32,16 @@ def xml_escape(s: str) -> str:
     )
 
 
-def render(cfg: dict, kind: str, version: str, build_number: str) -> str:
+def render_resource(cfg: dict, version: str) -> str:
     app = cfg["app"]
-    name = app["name"]
-    bundle_id = app["bundle_id"]
-    min_macos = app["min_macos"]
-    category = app.get("category", "")
-
-    if kind == "resource":
-        return f"""<?xml version="1.0" encoding="UTF-8"?>
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
     <key>CFBundleIdentifier</key>
-    <string>{xml_escape(bundle_id)}.resources</string>
+    <string>{xml_escape(app['bundle_id'])}.resources</string>
     <key>CFBundleName</key>
-    <string>{xml_escape(name)}_{xml_escape(cfg['build']['swift_target'])}</string>
+    <string>{xml_escape(app['name'])}_{xml_escape(cfg['build']['swift_target'])}</string>
     <key>CFBundlePackageType</key>
     <string>BNDL</string>
     <key>CFBundleShortVersionString</key>
@@ -56,13 +52,21 @@ def render(cfg: dict, kind: str, version: str, build_number: str) -> str:
 </plist>
 """
 
+
+def render_generated(cfg: dict, kind: str, version: str, build_number: str) -> str:
+    app = cfg["app"]
+    name = app["name"]
+    bundle_id = app["bundle_id"]
+    min_macos = app["min_macos"]
+    category = app.get("category", "")
+
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">',
         '<plist version="1.0">',
         "<dict>",
         "    <key>CFBundleExecutable</key>",
-        f"    <string>{xml_escape(name)}</string>",
+        f"    <string>{xml_escape(cfg.get('build', {}).get('executable', name))}</string>",
         "    <key>CFBundleIdentifier</key>",
         f"    <string>{xml_escape(bundle_id)}</string>",
         "    <key>CFBundleName</key>",
@@ -87,7 +91,6 @@ def render(cfg: dict, kind: str, version: str, build_number: str) -> str:
             f"    <string>{xml_escape(category)}</string>",
         ]
 
-    # Usage descriptions
     usage = cfg.get("plist", {}).get("usage_descriptions", {}) or {}
     for k, v in usage.items():
         lines += [
@@ -112,8 +115,6 @@ def render(cfg: dict, kind: str, version: str, build_number: str) -> str:
             f"    <{'true' if non_exempt else 'false'}/>",
         ]
 
-    # Arbitrary extra Info.plist keys, applied to all kinds. Supports string,
-    # bool, int. (More exotic types: extend here.)
     extras = cfg.get("plist", {}).get("extras", {}) or {}
     for k, v in extras.items():
         lines.append(f"    <key>{xml_escape(k)}</key>")
@@ -126,6 +127,38 @@ def render(cfg: dict, kind: str, version: str, build_number: str) -> str:
 
     lines += ["</dict>", "</plist>", ""]
     return "\n".join(lines)
+
+
+def render_passthrough(cfg: dict, kind: str, version: str, build_number: str,
+                       template_path: str, app_root: str) -> str:
+    """Read template plist, inject dynamic keys, write back as XML.
+
+    Only the keys that *must* change per build are written; everything else in
+    the template (document types, UTI declarations, custom Info.plist keys)
+    is preserved as-is.
+    """
+    full_template_path = template_path if os.path.isabs(template_path) else os.path.join(app_root, template_path)
+    with open(full_template_path, "rb") as f:
+        plist = plistlib.load(f)
+
+    plist["CFBundleShortVersionString"] = version
+    plist["CFBundleVersion"] = build_number
+
+    # Strip Sparkle keys when building for App Store (they're a rejection trigger).
+    if kind == "appstore":
+        for k in list(plist.keys()):
+            if k.startswith("SU") and k[2:3].isupper():
+                del plist[k]
+        if "appstore" in cfg:
+            plist["ITSAppUsesNonExemptEncryption"] = cfg["appstore"].get("non_exempt_encryption", False)
+        if cfg.get("app", {}).get("category"):
+            plist["LSApplicationCategoryType"] = cfg["app"]["category"]
+
+    if kind == "direct" and "sparkle" in cfg:
+        plist["SUFeedURL"] = cfg["sparkle"]["feed_url"]
+        plist["SUPublicEDKey"] = os.environ.get("SPARKLE_PUBLIC_KEY", "")
+
+    return plistlib.dumps(plist).decode("utf-8")
 
 
 def main():
@@ -141,7 +174,17 @@ def main():
         cfg = tomllib.load(f)
 
     build_number = args.build_number or args.version
-    content = render(cfg, args.kind, args.version, build_number)
+    app_root = os.path.dirname(os.path.abspath(args.config))
+
+    if args.kind == "resource":
+        content = render_resource(cfg, args.version)
+    else:
+        template = cfg.get("plist", {}).get("template")
+        if template:
+            content = render_passthrough(cfg, args.kind, args.version, build_number,
+                                          template, app_root)
+        else:
+            content = render_generated(cfg, args.kind, args.version, build_number)
 
     if args.out:
         with open(args.out, "w") as f:

@@ -72,20 +72,22 @@ echo ""
 echo "📱 Creating app bundle..."
 mkdir -p "${APP_PATH}/Contents/MacOS" "${APP_PATH}/Contents/Resources"
 
-BINARY=".build/release/${APP_NAME}"
+BINARY=".build/release/${TRIGGER_BUILD_EXECUTABLE}"
 [ -f "$BINARY" ] || { echo "❌ Binary not found: $BINARY"; exit 1; }
 
-cp "$BINARY" "${APP_PATH}/Contents/MacOS/"
+cp "$BINARY" "${APP_PATH}/Contents/MacOS/${APP_NAME}"
 chmod +x "${APP_PATH}/Contents/MacOS/${APP_NAME}"
 
 cp "${TRIGGER_BUILD_DIR}/AppIcon.icns" "${APP_PATH}/Contents/Resources/"
 [ -f LICENSE ] && cp LICENSE "${APP_PATH}/Contents/Resources/"
 
+HAS_BUNDLE=0
 if [ -d ".build/release/${TRIGGER_APP_RESOURCE_BUNDLE_NAME}" ]; then
     cp -r ".build/release/${TRIGGER_APP_RESOURCE_BUNDLE_NAME}" "${BUNDLE_PATH}"
+    HAS_BUNDLE=1
 fi
 
-if [ -d "$TRIGGER_BUILD_ASSETS" ]; then
+if [ "$HAS_BUNDLE" = "1" ] && [ -d "$TRIGGER_BUILD_ASSETS" ]; then
     echo "🎨 Compiling asset catalog..."
     xcrun actool \
         --compile "${BUNDLE_PATH}" \
@@ -102,9 +104,11 @@ python3 "${SCRIPT_DIR}/lib/render_plist.py" "$TRIGGER_CONFIG" \
 
 echo "APPL????" > "${APP_PATH}/Contents/PkgInfo"
 
-python3 "${SCRIPT_DIR}/lib/render_plist.py" "$TRIGGER_CONFIG" \
-    --kind resource --version "$VERSION" \
-    --out "${BUNDLE_PATH}/Info.plist"
+if [ "$HAS_BUNDLE" = "1" ]; then
+    python3 "${SCRIPT_DIR}/lib/render_plist.py" "$TRIGGER_CONFIG" \
+        --kind resource --version "$VERSION" \
+        --out "${BUNDLE_PATH}/Info.plist"
+fi
 
 echo "📋 Embedding provisioning profile..."
 if [ ! -f "$TRIGGER_BUILD_PROVISIONING_PROFILE" ]; then

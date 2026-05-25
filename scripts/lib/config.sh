@@ -1,5 +1,5 @@
 #!/bin/bash
-# Loads trigger.toml from the current working directory into TRIGGER_* env vars.
+# Loads catapult.toml from the current working directory into CATAPULT_* env vars.
 # Source this from any script in scripts/ as:
 #   source "$(dirname "$0")/lib/config.sh"
 #
@@ -8,95 +8,95 @@
 
 set -e
 
-TRIGGER_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TRIGGER_REPO_DIR="$(cd "${TRIGGER_LIB_DIR}/../.." && pwd)"
-TRIGGER_SCRIPTS_DIR="${TRIGGER_REPO_DIR}/scripts"
-TRIGGER_TEMPLATES_DIR="${TRIGGER_REPO_DIR}/templates"
+CATAPULT_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CATAPULT_REPO_DIR="$(cd "${CATAPULT_LIB_DIR}/../.." && pwd)"
+CATAPULT_SCRIPTS_DIR="${CATAPULT_REPO_DIR}/scripts"
+CATAPULT_TEMPLATES_DIR="${CATAPULT_REPO_DIR}/templates"
 
-# App repo root = current working directory. All paths in trigger.toml are
+# App repo root = current working directory. All paths in catapult.toml are
 # resolved relative to it.
-TRIGGER_APP_ROOT="${TRIGGER_APP_ROOT:-$(pwd)}"
-TRIGGER_CONFIG="${TRIGGER_CONFIG:-${TRIGGER_APP_ROOT}/trigger.toml}"
+CATAPULT_APP_ROOT="${CATAPULT_APP_ROOT:-$(pwd)}"
+CATAPULT_CONFIG="${CATAPULT_CONFIG:-${CATAPULT_APP_ROOT}/catapult.toml}"
 
 # Optional .env (matches peel's convention)
-[ -f "${TRIGGER_APP_ROOT}/.env" ] && source "${TRIGGER_APP_ROOT}/.env"
+[ -f "${CATAPULT_APP_ROOT}/.env" ] && source "${CATAPULT_APP_ROOT}/.env"
 
-if [ ! -f "$TRIGGER_CONFIG" ]; then
-    echo "❌ trigger: $TRIGGER_CONFIG not found" >&2
+if [ ! -f "$CATAPULT_CONFIG" ]; then
+    echo "❌ catapult: $CATAPULT_CONFIG not found" >&2
     exit 1
 fi
 
 # Load TOML into env
-eval "$(python3 "${TRIGGER_LIB_DIR}/parse_config.py" "$TRIGGER_CONFIG")"
+eval "$(python3 "${CATAPULT_LIB_DIR}/parse_config.py" "$CATAPULT_CONFIG")"
 
 # Required for any kind
-: "${TRIGGER_APP_NAME:?app.name required in trigger.toml}"
-: "${TRIGGER_APP_SLUG:?app.slug required in trigger.toml}"
-: "${TRIGGER_APP_BUNDLE_ID:?app.bundle_id required in trigger.toml}"
-: "${TRIGGER_APP_TEAM_ID:?app.team_id required in trigger.toml}"
-: "${TRIGGER_APP_DEVELOPER:?app.developer required in trigger.toml}"
-: "${TRIGGER_APP_MIN_MACOS:?app.min_macos required in trigger.toml}"
-: "${TRIGGER_BUILD_ARCH:?build.arch required in trigger.toml}"
-: "${TRIGGER_BUILD_TARGET_TRIPLE:?build.target_triple required in trigger.toml}"
+: "${CATAPULT_APP_NAME:?app.name required in catapult.toml}"
+: "${CATAPULT_APP_SLUG:?app.slug required in catapult.toml}"
+: "${CATAPULT_APP_BUNDLE_ID:?app.bundle_id required in catapult.toml}"
+: "${CATAPULT_APP_TEAM_ID:?app.team_id required in catapult.toml}"
+: "${CATAPULT_APP_DEVELOPER:?app.developer required in catapult.toml}"
+: "${CATAPULT_APP_MIN_MACOS:?app.min_macos required in catapult.toml}"
+: "${CATAPULT_BUILD_ARCH:?build.arch required in catapult.toml}"
+: "${CATAPULT_BUILD_TARGET_TRIPLE:?build.target_triple required in catapult.toml}"
 
 # Build kind: "swift" (default) or "tauri"
-TRIGGER_BUILD_KIND="${TRIGGER_BUILD_KIND:-swift}"
-case "$TRIGGER_BUILD_KIND" in
+CATAPULT_BUILD_KIND="${CATAPULT_BUILD_KIND:-swift}"
+case "$CATAPULT_BUILD_KIND" in
     swift|tauri) ;;
-    *) echo "❌ trigger: build.kind must be 'swift' or 'tauri' (got '$TRIGGER_BUILD_KIND')" >&2; exit 1 ;;
+    *) echo "❌ catapult: build.kind must be 'swift' or 'tauri' (got '$CATAPULT_BUILD_KIND')" >&2; exit 1 ;;
 esac
 
 # Swift-only required fields
-if [ "$TRIGGER_BUILD_KIND" = "swift" ]; then
-    : "${TRIGGER_BUILD_SWIFT_TARGET:?build.swift_target required for swift builds}"
+if [ "$CATAPULT_BUILD_KIND" = "swift" ]; then
+    : "${CATAPULT_BUILD_SWIFT_TARGET:?build.swift_target required for swift builds}"
 fi
 
 # Tauri-only fields
-if [ "$TRIGGER_BUILD_KIND" = "tauri" ]; then
-    TRIGGER_BUILD_PACKAGE_MANAGER="${TRIGGER_BUILD_PACKAGE_MANAGER:-npm}"
-    TRIGGER_BUILD_TAURI_DIR="${TRIGGER_BUILD_TAURI_DIR:-src-tauri}"
-    TRIGGER_BUILD_FRONTEND_BUILD="${TRIGGER_BUILD_FRONTEND_BUILD:-${TRIGGER_BUILD_PACKAGE_MANAGER} run build}"
-    case "$TRIGGER_BUILD_PACKAGE_MANAGER" in
+if [ "$CATAPULT_BUILD_KIND" = "tauri" ]; then
+    CATAPULT_BUILD_PACKAGE_MANAGER="${CATAPULT_BUILD_PACKAGE_MANAGER:-npm}"
+    CATAPULT_BUILD_TAURI_DIR="${CATAPULT_BUILD_TAURI_DIR:-src-tauri}"
+    CATAPULT_BUILD_FRONTEND_BUILD="${CATAPULT_BUILD_FRONTEND_BUILD:-${CATAPULT_BUILD_PACKAGE_MANAGER} run build}"
+    case "$CATAPULT_BUILD_PACKAGE_MANAGER" in
         npm|pnpm|bun|yarn) ;;
-        *) echo "❌ trigger: build.package_manager must be npm/pnpm/bun/yarn" >&2; exit 1 ;;
+        *) echo "❌ catapult: build.package_manager must be npm/pnpm/bun/yarn" >&2; exit 1 ;;
     esac
 fi
 
 # Defaults
-TRIGGER_BUILD_ICON="${TRIGGER_BUILD_ICON:-Sources/App/Resources/AppIcon.png}"
-TRIGGER_BUILD_ASSETS="${TRIGGER_BUILD_ASSETS:-Sources/App/Resources/Assets.xcassets}"
-TRIGGER_BUILD_ENTITLEMENTS_DIRECT="${TRIGGER_BUILD_ENTITLEMENTS_DIRECT:-${TRIGGER_APP_NAME}.entitlements}"
-TRIGGER_BUILD_ENTITLEMENTS_APPSTORE="${TRIGGER_BUILD_ENTITLEMENTS_APPSTORE:-${TRIGGER_APP_NAME}-appstore.entitlements}"
-TRIGGER_BUILD_PROVISIONING_PROFILE="${TRIGGER_BUILD_PROVISIONING_PROFILE:-${TRIGGER_APP_NAME}.provisionprofile}"
+CATAPULT_BUILD_ICON="${CATAPULT_BUILD_ICON:-Sources/App/Resources/AppIcon.png}"
+CATAPULT_BUILD_ASSETS="${CATAPULT_BUILD_ASSETS:-Sources/App/Resources/Assets.xcassets}"
+CATAPULT_BUILD_ENTITLEMENTS_DIRECT="${CATAPULT_BUILD_ENTITLEMENTS_DIRECT:-${CATAPULT_APP_NAME}.entitlements}"
+CATAPULT_BUILD_ENTITLEMENTS_APPSTORE="${CATAPULT_BUILD_ENTITLEMENTS_APPSTORE:-${CATAPULT_APP_NAME}-appstore.entitlements}"
+CATAPULT_BUILD_PROVISIONING_PROFILE="${CATAPULT_BUILD_PROVISIONING_PROFILE:-${CATAPULT_APP_NAME}.provisionprofile}"
 # Executable name inside the .app — defaults to app.name. Override when the
 # compiled binary name differs (e.g. trotter has APP_NAME=Trotter but the
 # binary in .build/release is "trotter").
-TRIGGER_BUILD_EXECUTABLE="${TRIGGER_BUILD_EXECUTABLE:-${TRIGGER_APP_NAME}}"
+CATAPULT_BUILD_EXECUTABLE="${CATAPULT_BUILD_EXECUTABLE:-${CATAPULT_APP_NAME}}"
 
 # Derived identities
-export TRIGGER_APP_SIGNING_IDENTITY_APPSTORE="Apple Distribution: ${TRIGGER_APP_DEVELOPER} (${TRIGGER_APP_TEAM_ID})"
-export TRIGGER_APP_SIGNING_IDENTITY_INSTALLER="3rd Party Mac Developer Installer: ${TRIGGER_APP_DEVELOPER} (${TRIGGER_APP_TEAM_ID})"
-export TRIGGER_APP_BUNDLE_ID_RESOURCES="${TRIGGER_APP_BUNDLE_ID}.resources"
+export CATAPULT_APP_SIGNING_IDENTITY_APPSTORE="Apple Distribution: ${CATAPULT_APP_DEVELOPER} (${CATAPULT_APP_TEAM_ID})"
+export CATAPULT_APP_SIGNING_IDENTITY_INSTALLER="3rd Party Mac Developer Installer: ${CATAPULT_APP_DEVELOPER} (${CATAPULT_APP_TEAM_ID})"
+export CATAPULT_APP_BUNDLE_ID_RESOURCES="${CATAPULT_APP_BUNDLE_ID}.resources"
 
-if [ "$TRIGGER_BUILD_KIND" = "swift" ]; then
-    export TRIGGER_APP_RESOURCE_BUNDLE_NAME="${TRIGGER_APP_NAME}_${TRIGGER_BUILD_SWIFT_TARGET}.bundle"
+if [ "$CATAPULT_BUILD_KIND" = "swift" ]; then
+    export CATAPULT_APP_RESOURCE_BUNDLE_NAME="${CATAPULT_APP_NAME}_${CATAPULT_BUILD_SWIFT_TARGET}.bundle"
 fi
 
 # Paths
-export TRIGGER_DIST_DIR="${TRIGGER_APP_ROOT}/dist"
-export TRIGGER_BUILD_DIR="${TRIGGER_APP_ROOT}/build"
-export TRIGGER_BUILD_DIR_APPSTORE="${TRIGGER_APP_ROOT}/build-appstore"
+export CATAPULT_DIST_DIR="${CATAPULT_APP_ROOT}/dist"
+export CATAPULT_BUILD_DIR="${CATAPULT_APP_ROOT}/build"
+export CATAPULT_BUILD_DIR_APPSTORE="${CATAPULT_APP_ROOT}/build-appstore"
 
 # Provisioning profile full path
-case "$TRIGGER_BUILD_PROVISIONING_PROFILE" in
+case "$CATAPULT_BUILD_PROVISIONING_PROFILE" in
     /*) ;;
-    ~*) TRIGGER_BUILD_PROVISIONING_PROFILE="${TRIGGER_BUILD_PROVISIONING_PROFILE/#\~/$HOME}" ;;
-    *)  TRIGGER_BUILD_PROVISIONING_PROFILE="${HOME}/Library/MobileDevice/Provisioning Profiles/${TRIGGER_BUILD_PROVISIONING_PROFILE}" ;;
+    ~*) CATAPULT_BUILD_PROVISIONING_PROFILE="${CATAPULT_BUILD_PROVISIONING_PROFILE/#\~/$HOME}" ;;
+    *)  CATAPULT_BUILD_PROVISIONING_PROFILE="${HOME}/Library/MobileDevice/Provisioning Profiles/${CATAPULT_BUILD_PROVISIONING_PROFILE}" ;;
 esac
-export TRIGGER_BUILD_PROVISIONING_PROFILE
+export CATAPULT_BUILD_PROVISIONING_PROFILE
 
-export TRIGGER_BUILD_KIND TRIGGER_BUILD_EXECUTABLE
-export TRIGGER_BUILD_ICON TRIGGER_BUILD_ASSETS
-export TRIGGER_BUILD_ICON_COMMAND
-export TRIGGER_BUILD_ENTITLEMENTS_DIRECT TRIGGER_BUILD_ENTITLEMENTS_APPSTORE
-export TRIGGER_BUILD_PACKAGE_MANAGER TRIGGER_BUILD_TAURI_DIR TRIGGER_BUILD_FRONTEND_BUILD
+export CATAPULT_BUILD_KIND CATAPULT_BUILD_EXECUTABLE
+export CATAPULT_BUILD_ICON CATAPULT_BUILD_ASSETS
+export CATAPULT_BUILD_ICON_COMMAND
+export CATAPULT_BUILD_ENTITLEMENTS_DIRECT CATAPULT_BUILD_ENTITLEMENTS_APPSTORE
+export CATAPULT_BUILD_PACKAGE_MANAGER CATAPULT_BUILD_TAURI_DIR CATAPULT_BUILD_FRONTEND_BUILD

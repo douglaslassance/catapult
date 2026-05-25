@@ -2,7 +2,7 @@
 """Render Info.plist files for direct distribution or App Store builds.
 
 Two modes:
-  - Generated (default): build the plist from trigger.toml fields.
+  - Generated (default): build the plist from catapult.toml fields.
   - Passthrough: `[plist] template = "Info.plist"` — read the app's committed
     plist as the base, inject version + signing/sparkle/appstore keys, and
     preserve every other key (document types, UTI declarations, etc.).
@@ -19,7 +19,7 @@ import sys
 try:
     import tomllib
 except ImportError:
-    sys.stderr.write("trigger: need Python 3.11+\n")
+    sys.stderr.write("catapult: need Python 3.11+\n")
     sys.exit(1)
 
 

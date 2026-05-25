@@ -24,21 +24,21 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/config.sh"
 
-if [ "$TRIGGER_BUILD_KIND" != "tauri" ]; then
-    echo "❌ build-tauri.sh requires [build] kind = \"tauri\" in trigger.toml"
+if [ "$CATAPULT_BUILD_KIND" != "tauri" ]; then
+    echo "❌ build-tauri.sh requires [build] kind = \"tauri\" in catapult.toml"
     exit 1
 fi
 
-cd "$TRIGGER_APP_ROOT"
+cd "$CATAPULT_APP_ROOT"
 
 VERSION="${1:-$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")}"
-APP_NAME="$TRIGGER_APP_NAME"
-SLUG="$TRIGGER_APP_SLUG"
-TARGET="$TRIGGER_BUILD_TARGET_TRIPLE"
-BUILD_DIR="$TRIGGER_BUILD_DIR"
-DIST_DIR="$TRIGGER_DIST_DIR"
+APP_NAME="$CATAPULT_APP_NAME"
+SLUG="$CATAPULT_APP_SLUG"
+TARGET="$CATAPULT_BUILD_TARGET_TRIPLE"
+BUILD_DIR="$CATAPULT_BUILD_DIR"
+DIST_DIR="$CATAPULT_DIST_DIR"
 DMG_NAME="${SLUG}-${VERSION}-${TARGET}.dmg"
-TAURI_DIR="$TRIGGER_BUILD_TAURI_DIR"
+TAURI_DIR="$CATAPULT_BUILD_TAURI_DIR"
 
 echo "🔨 Building ${APP_NAME} v${VERSION} (Tauri)"
 echo ""
@@ -48,7 +48,7 @@ mkdir -p "${BUILD_DIR}" "${DIST_DIR}"
 
 # 1. Frontend build (skip if package_manager script handles it via tauri's beforeBuildCommand)
 echo "📦 Installing dependencies..."
-case "$TRIGGER_BUILD_PACKAGE_MANAGER" in
+case "$CATAPULT_BUILD_PACKAGE_MANAGER" in
     bun)  bun install ;;
     pnpm) pnpm install ;;
     yarn) yarn install ;;
@@ -58,7 +58,7 @@ echo ""
 
 # 2. Tauri build — runs cargo build --release + bundles the .app
 echo "📦 Running tauri build..."
-case "$TRIGGER_BUILD_PACKAGE_MANAGER" in
+case "$CATAPULT_BUILD_PACKAGE_MANAGER" in
     bun)  bun run tauri build ;;
     pnpm) pnpm tauri build ;;
     yarn) yarn tauri build ;;
@@ -67,7 +67,7 @@ esac
 echo ""
 
 # 3. Locate the .app Tauri produced. The directory name is the productName
-# from tauri.conf.json — which the app owner sets to $TRIGGER_APP_NAME.
+# from tauri.conf.json — which the app owner sets to $CATAPULT_APP_NAME.
 TAURI_APP_SRC="${TAURI_DIR}/target/release/bundle/macos/${APP_NAME}.app"
 if [ ! -d "$TAURI_APP_SRC" ]; then
     echo "❌ Tauri did not produce ${TAURI_APP_SRC}"
@@ -91,13 +91,13 @@ if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
                 --preserve-metadata=entitlements "$f"
         done
     codesign --force --sign "$APPLE_SIGNING_IDENTITY" \
-        --entitlements "$TRIGGER_BUILD_ENTITLEMENTS_DIRECT" \
+        --entitlements "$CATAPULT_BUILD_ENTITLEMENTS_DIRECT" \
         --options runtime --timestamp \
         "${APP_PATH}"
     echo "✅ Signed"
 else
     echo "🔏 Ad-hoc signing (local build)..."
-    codesign --force --sign - --entitlements "$TRIGGER_BUILD_ENTITLEMENTS_DIRECT" \
+    codesign --force --sign - --entitlements "$CATAPULT_BUILD_ENTITLEMENTS_DIRECT" \
         "${APP_PATH}" || echo "⚠️  Code signing skipped"
 fi
 echo ""
@@ -105,7 +105,7 @@ echo ""
 # 5. DMG
 echo "💿 Creating DMG..."
 rm -f "${DIST_DIR}/${DMG_NAME}"
-VOLNAME="${TRIGGER_DMG_VOLUME_NAME:-$APP_NAME}"
+VOLNAME="${CATAPULT_DMG_VOLUME_NAME:-$APP_NAME}"
 DMG_MOUNT="/tmp/${SLUG}-dmg-$$"
 DMG_TEMP="/tmp/${SLUG}-temp-$$.dmg"
 mkdir -p "$DMG_MOUNT"

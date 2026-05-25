@@ -1,7 +1,7 @@
-name: CI (trigger)
+name: CI (catapult)
 
 # Reusable CI workflow for Swift macOS apps. Apps invoke this with:
-#   uses: douglaslassance/trigger/.github/workflows/ci.yml@<tag>
+#   uses: douglaslassance/catapult/.github/workflows/ci.yml@<tag>
 
 on:
   workflow_call:

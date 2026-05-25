@@ -1,8 +1,8 @@
 #!/bin/bash
-# build-appstore.sh — Build a signed .pkg for Mac App Store submission.
+# build_appstore.sh — Build a signed .pkg for Mac App Store submission.
 # Requires [appstore] section in catapult.toml.
 #
-# Usage: build-appstore.sh [version]
+# Usage: build_appstore.sh [version]
 
 if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     sed -n '2,5p' "$0" | sed 's/^# \{0,1\}//'
@@ -12,7 +12,7 @@ fi
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/lib/config.sh"
+source "${SCRIPT_DIR}/config.sh"
 
 if [ -z "${CATAPULT_HAS_APPSTORE:-}" ]; then
     echo "❌ [appstore] section missing from catapult.toml"
@@ -62,7 +62,7 @@ echo ""
 
 echo "🎨 Generating AppIcon.icns..."
 mkdir -p "$CATAPULT_BUILD_DIR"
-"${SCRIPT_DIR}/lib/icon.sh"
+"${SCRIPT_DIR}/icon.sh"
 echo ""
 
 echo "📦 Building ${CATAPULT_BUILD_ARCH} binary (App Store)..."
@@ -98,14 +98,14 @@ if [ "$HAS_BUNDLE" = "1" ] && [ -d "$CATAPULT_BUILD_ASSETS" ]; then
         "$CATAPULT_BUILD_ASSETS" 2>&1 | grep -v "^$" || true
 fi
 
-python3 "${SCRIPT_DIR}/lib/render_plist.py" "$CATAPULT_CONFIG" \
+python3 "${SCRIPT_DIR}/render_plist.py" "$CATAPULT_CONFIG" \
     --kind appstore --version "$VERSION" --build-number "$BUILD_NUMBER" \
     --out "${APP_PATH}/Contents/Info.plist"
 
 echo "APPL????" > "${APP_PATH}/Contents/PkgInfo"
 
 if [ "$HAS_BUNDLE" = "1" ]; then
-    python3 "${SCRIPT_DIR}/lib/render_plist.py" "$CATAPULT_CONFIG" \
+    python3 "${SCRIPT_DIR}/render_plist.py" "$CATAPULT_CONFIG" \
         --kind resource --version "$VERSION" \
         --out "${BUNDLE_PATH}/Info.plist"
 fi
@@ -149,4 +149,4 @@ echo ""
 # Post-build verification
 echo "🔍 Running post-build verification..."
 echo ""
-"${SCRIPT_DIR}/verify-appstore.sh"
+"${SCRIPT_DIR}/verify_appstore.sh"

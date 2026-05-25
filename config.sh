@@ -1,17 +1,14 @@
 #!/bin/bash
 # Loads catapult.toml from the current working directory into CATAPULT_* env vars.
-# Source this from any script in scripts/ as:
-#   source "$(dirname "$0")/lib/config.sh"
+# Source this from any sibling script as:
+#   source "$(dirname "$0")/config.sh"
 #
 # Derived identity strings (signing identities, derived bundle IDs, etc.)
 # are computed here, after the python loader has run.
 
 set -e
 
-CATAPULT_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CATAPULT_REPO_DIR="$(cd "${CATAPULT_LIB_DIR}/../.." && pwd)"
-CATAPULT_SCRIPTS_DIR="${CATAPULT_REPO_DIR}/scripts"
-CATAPULT_TEMPLATES_DIR="${CATAPULT_REPO_DIR}/templates"
+CATAPULT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # App repo root = current working directory. All paths in catapult.toml are
 # resolved relative to it.
@@ -27,7 +24,7 @@ if [ ! -f "$CATAPULT_CONFIG" ]; then
 fi
 
 # Load TOML into env
-eval "$(python3 "${CATAPULT_LIB_DIR}/parse_config.py" "$CATAPULT_CONFIG")"
+eval "$(python3 "${CATAPULT_DIR}/parse_config.py" "$CATAPULT_CONFIG")"
 
 # Required for any kind
 : "${CATAPULT_APP_NAME:?app.name required in catapult.toml}"

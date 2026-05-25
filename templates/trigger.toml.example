@@ -13,15 +13,22 @@ category    = "public.app-category.productivity"
 min_macos   = "13.0"
 
 [build]
+kind          = "swift"                    # "swift" (default) or "tauri"
 arch          = "arm64"                    # passed to `swift build --arch`
 target_triple = "aarch64-apple-darwin"     # used in DMG filename + URLs
 swift_target  = "App"                      # SPM target name; resource bundle is "${name}_${swift_target}.bundle"
 # Optional overrides (defaults shown):
+# executable            = "${name}"        # binary name in .build/release; set if it differs from app.name
 # icon                  = "Sources/App/Resources/AppIcon.png"
 # assets                = "Sources/App/Resources/Assets.xcassets"
 # entitlements_direct   = "${name}.entitlements"
 # entitlements_appstore = "${name}-appstore.entitlements"
 # provisioning_profile  = "${name}.provisionprofile"   # filename in ~/Library/MobileDevice/Provisioning Profiles/
+
+# For kind = "tauri", instead of swift_target use:
+# package_manager     = "bun"              # "bun", "pnpm", "yarn", or "npm"
+# tauri_dir           = "src-tauri"        # default
+# frontend_build      = "bun run build"    # default = "${package_manager} run build"
 
 # --- Optional channels --- presence of each section enables that channel.
 
@@ -44,11 +51,22 @@ cask_name = "peel"
 [appstore]                                 # build .pkg + upload to App Store Connect
 non_exempt_encryption = false
 
-# Free-form Info.plist usage descriptions (NS*UsageDescription)
+# Two modes for the Info.plist:
+#
+# A) Generated (default) — built from trigger.toml fields. List usage
+#    descriptions and any extra string/bool/int keys here.
 [plist.usage_descriptions]
 NSDesktopFolderUsageDescription   = "Peel needs access to browse and display your tagged files."
 NSDocumentsFolderUsageDescription = "Peel needs access to browse and display your tagged files."
 
-# Free-form additional Info.plist keys (string/bool/integer)
 # [plist.extras]
 # LSUIElement = true
+#
+# B) Passthrough — point at an existing Info.plist in the app repo. Trigger
+#    only injects CFBundleShortVersionString / CFBundleVersion / Sparkle keys
+#    / ITSAppUsesNonExemptEncryption and preserves everything else (document
+#    types, UTI declarations, custom keys). Use this when the app has
+#    structures the generator can't produce.
+#
+# [plist]
+# template = "Info.plist"

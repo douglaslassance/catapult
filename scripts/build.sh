@@ -15,6 +15,11 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/config.sh"
 
+# Dispatch by build kind. Swift continues below; Tauri delegates.
+if [ "$TRIGGER_BUILD_KIND" = "tauri" ]; then
+    exec "${SCRIPT_DIR}/build-tauri.sh" "$@"
+fi
+
 cd "$TRIGGER_APP_ROOT"
 
 VERSION="${1:-$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")}"
@@ -49,13 +54,13 @@ echo ""
 echo "📱 Creating app bundle..."
 mkdir -p "${APP_PATH}/Contents/MacOS" "${APP_PATH}/Contents/Resources"
 
-BINARY=".build/release/${APP_NAME}"
+BINARY=".build/release/${TRIGGER_BUILD_EXECUTABLE}"
 if [ ! -f "$BINARY" ]; then
     echo "❌ Binary not found: $BINARY"
     exit 1
 fi
 
-cp "$BINARY" "${APP_PATH}/Contents/MacOS/"
+cp "$BINARY" "${APP_PATH}/Contents/MacOS/${APP_NAME}"
 chmod +x "${APP_PATH}/Contents/MacOS/${APP_NAME}"
 install_name_tool -add_rpath "@executable_path/../Frameworks" \
     "${APP_PATH}/Contents/MacOS/${APP_NAME}"
@@ -69,11 +74,13 @@ if [ -d ".build/release/${TRIGGER_APP_RESOURCE_BUNDLE_NAME}" ]; then
     cp -r ".build/release/${TRIGGER_APP_RESOURCE_BUNDLE_NAME}" "${BUNDLE_PATH}"
     echo "✅ Resource bundle copied"
 else
-    mkdir -p "${BUNDLE_PATH}"
-    echo "⚠️  No SPM resource bundle in .build/release — created empty"
+    # Some packages (no `resources:` in target) don't emit a resource bundle.
+    # Skip; downstream actool / plist writes will be no-ops or fail clearly.
+    BUNDLE_PATH=""
+    echo "ℹ️  No SPM resource bundle in .build/release — skipping"
 fi
 
-if [ -d "$TRIGGER_BUILD_ASSETS" ]; then
+if [ -n "$BUNDLE_PATH" ] && [ -d "$TRIGGER_BUILD_ASSETS" ]; then
     echo "🎨 Compiling asset catalog..."
     xcrun actool \
         --compile "${BUNDLE_PATH}" \
@@ -91,10 +98,12 @@ python3 "${SCRIPT_DIR}/lib/render_plist.py" "$TRIGGER_CONFIG" \
 
 echo "APPL????" > "${APP_PATH}/Contents/PkgInfo"
 
-# Info.plist for the resource bundle (codesign/notarization scanner expects one)
-python3 "${SCRIPT_DIR}/lib/render_plist.py" "$TRIGGER_CONFIG" \
-    --kind resource --version "$VERSION" \
-    --out "${BUNDLE_PATH}/Info.plist"
+# Resource bundle Info.plist (codesign/notarization scanner expects one)
+if [ -n "$BUNDLE_PATH" ]; then
+    python3 "${SCRIPT_DIR}/lib/render_plist.py" "$TRIGGER_CONFIG" \
+        --kind resource --version "$VERSION" \
+        --out "${BUNDLE_PATH}/Info.plist"
+fi
 
 # Sparkle embedding (optional)
 if [ -n "${TRIGGER_HAS_SPARKLE:-}" ]; then

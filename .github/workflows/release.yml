@@ -74,7 +74,7 @@ jobs:
           NOTARIZATION_ISSUER_ID: ${{ secrets.NOTARIZATION_ISSUER_ID }}
           SPARKLE_PUBLIC_KEY: ${{ secrets.SPARKLE_PUBLIC_KEY }}
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
-        run: ./catapult/scripts/build.sh "${{ steps.ver.outputs.version }}"
+        run: ./catapult/build.sh "${{ steps.ver.outputs.version }}"
 
       - name: Upload to S3
         env:
@@ -88,7 +88,7 @@ jobs:
           CLOUDFLARE_KV_NAMESPACE_ID: ${{ secrets.CLOUDFLARE_KV_NAMESPACE_ID }}
         run: |
           if grep -q '^\[s3\]' catapult.toml; then
-            ./catapult/scripts/upload.sh "${{ steps.ver.outputs.version }}"
+            ./catapult/upload.sh "${{ steps.ver.outputs.version }}"
           else
             echo "No [s3] section — skipping upload"
           fi
@@ -133,7 +133,7 @@ jobs:
           # GitHub forbids the GITHUB_ prefix in secret names; rename HOMEBREW_TAP_TOKEN.
           GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           HOMEBREW_TAP_URL: ${{ secrets.HOMEBREW_TAP_URL }}
-        run: ./catapult/scripts/push-homebrew.sh --pull-request "${{ steps.ver.outputs.version }}"
+        run: ./catapult/push_homebrew.sh --pull-request "${{ steps.ver.outputs.version }}"
 
   appstore:
     if: contains(inputs.channels, 'appstore')
@@ -191,11 +191,11 @@ jobs:
           echo "$PROVISIONING_PROFILE_B64" | base64 --decode > "$PP_DIR/$PROFILE_NAME"
 
       - name: Build for App Store
-        run: ./catapult/scripts/build-appstore.sh "${{ steps.ver.outputs.version }}"
+        run: ./catapult/build_appstore.sh "${{ steps.ver.outputs.version }}"
 
       - name: Upload to App Store Connect
         env:
           NOTARIZATION_KEY: ${{ secrets.NOTARIZATION_KEY }}
           NOTARIZATION_KEY_ID: ${{ secrets.NOTARIZATION_KEY_ID }}
           NOTARIZATION_ISSUER_ID: ${{ secrets.NOTARIZATION_ISSUER_ID }}
-        run: ./catapult/scripts/upload-appstore.sh "${{ steps.ver.outputs.version }}"
+        run: ./catapult/upload_appstore.sh "${{ steps.ver.outputs.version }}"

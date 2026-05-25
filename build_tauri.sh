@@ -1,5 +1,5 @@
 #!/bin/bash
-# build-tauri.sh — Build a notarized .app + .dmg for a Tauri (Rust+webview) app.
+# build_tauri.sh — Build a notarized .app + .dmg for a Tauri (Rust+webview) app.
 #
 # Pipeline:
 #   1. Frontend build (configured via [build] package_manager + frontend_build)
@@ -10,9 +10,9 @@
 #   6. SHA256
 #
 # Sparkle is intentionally not supported here — Tauri ships its own updater
-# plugin. Use [s3] + push-homebrew.sh downstream just like for Swift apps.
+# plugin. Use [s3] + push_homebrew.sh downstream just like for Swift apps.
 #
-# Usage: build-tauri.sh [version]
+# Usage: build_tauri.sh [version]
 
 if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
@@ -22,10 +22,10 @@ fi
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/lib/config.sh"
+source "${SCRIPT_DIR}/config.sh"
 
 if [ "$CATAPULT_BUILD_KIND" != "tauri" ]; then
-    echo "❌ build-tauri.sh requires [build] kind = \"tauri\" in catapult.toml"
+    echo "❌ build_tauri.sh requires [build] kind = \"tauri\" in catapult.toml"
     exit 1
 fi
 

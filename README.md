@@ -30,25 +30,25 @@ and commit. GitHub Actions workflows use the same SHA via `@<sha>` refs
 checked into the submodule.
 
 Add a `catapult.toml` at the app repo root (copy
-[templates/catapult.toml.example](templates/catapult.toml.example) and edit).
+[catapult.toml.example](catapult.toml.example) and edit).
 
 Add app-specific files at the app repo root:
 - `<AppName>.entitlements` and `<AppName>-appstore.entitlements`
-  (see [templates/entitlements-direct.example](templates/entitlements-direct.example)
-  and [templates/entitlements-appstore.example](templates/entitlements-appstore.example))
+  (see [entitlements-direct.example](entitlements-direct.example)
+  and [entitlements-appstore.example](entitlements-appstore.example))
 - `cask.rb` if shipping via Homebrew
-  (see [templates/cask.rb.example](templates/cask.rb.example))
-- `.env` for local secrets (copy [templates/env.example](templates/env.example))
+  (see [cask.rb.example](cask.rb.example))
+- `.env` for local secrets (copy [env.example](env.example))
 
 ### Local use
 
 ```sh
-./catapult/scripts/build.sh                # direct distribution (DMG)
-./catapult/scripts/build-appstore.sh       # App Store .pkg
-./catapult/scripts/verify-appstore.sh      # post-build sanity checks
-./catapult/scripts/upload.sh               # push DMG/appcast/KV to S3
-./catapult/scripts/upload-appstore.sh      # upload .pkg to App Store Connect
-./catapult/scripts/push-homebrew.sh        # update tap, optionally --pull-request
+./catapult/build.sh                # direct distribution (DMG)
+./catapult/build_appstore.sh       # App Store .pkg
+./catapult/verify_appstore.sh      # post-build sanity checks
+./catapult/upload.sh               # push DMG/appcast/KV to S3
+./catapult/upload_appstore.sh      # upload .pkg to App Store Connect
+./catapult/push_homebrew.sh        # update tap, optionally --pull-request
 ```
 
 All scripts source `.env` from the app root for local secrets.
@@ -125,7 +125,7 @@ non_exempt_encryption = false
 NSDocumentsFolderUsageDescription = "Peel needs access to browse and display your tagged files."
 ```
 
-See [templates/catapult.toml.example](templates/catapult.toml.example) for the
+See [catapult.toml.example](catapult.toml.example) for the
 full annotated schema, including optional overrides.
 
 ## Required secrets

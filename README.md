@@ -38,7 +38,7 @@ Add app-specific files at the app repo root:
   and [entitlements-appstore.example](entitlements-appstore.example))
 - `cask.rb` if shipping via Homebrew
   (see [cask.rb.example](cask.rb.example))
-- `.env` for local secrets (copy [env.example](env.example))
+- `.env` for local secrets (copy `catapult/env.example` to `.env`)
 
 ### Local use
 

@@ -14,11 +14,20 @@ Each app picks which channels it ships through via its `trigger.toml`.
 
 ## Consuming trigger from an app
 
-Add as a git submodule pinned to a tag:
+Add as a git submodule. The submodule itself is always SHA-pinned by git;
+you just pick which commit to start from:
 
 ```sh
-git submodule add -b 0.1.0 https://github.com/douglaslassance/trigger.git trigger
+git submodule add https://github.com/douglaslassance/trigger.git trigger
+cd trigger && git checkout <full-sha> && cd ..
+git add .gitmodules trigger
 ```
+
+`trigger` is intentionally untagged — releases happen by commit. To bump,
+`cd trigger && git fetch && git checkout <new-sha> && cd .. && git add trigger`
+and commit. GitHub Actions workflows use the same SHA via `@<sha>` refs
+(see below), so the version of trigger that runs in CI matches what's
+checked into the submodule.
 
 Add a `trigger.toml` at the app repo root (copy
 [templates/trigger.toml.example](templates/trigger.toml.example) and edit).
@@ -45,7 +54,9 @@ All scripts source `.env` from the app root for local secrets.
 
 ### GitHub Actions
 
-Use the reusable workflows from each app's `.github/workflows/`:
+Use the reusable workflows from each app's `.github/workflows/`. Pin to
+the same full SHA as your submodule — never `@main`. GitHub Actions
+accepts full commit SHAs as refs:
 
 ```yaml
 # .github/workflows/cd.yml
@@ -56,7 +67,7 @@ on:
   workflow_dispatch:
 jobs:
   release:
-    uses: douglaslassance/trigger/.github/workflows/release.yml@0.1.0
+    uses: douglaslassance/trigger/.github/workflows/release.yml@140ff0528eb09b702a5542f8451f106354dd6b1b
     secrets: inherit
     with:
       channels: "direct,homebrew"   # or "direct,appstore,homebrew"
@@ -68,8 +79,10 @@ name: CI
 on: pull_request
 jobs:
   ci:
-    uses: douglaslassance/trigger/.github/workflows/ci.yml@0.1.0
+    uses: douglaslassance/trigger/.github/workflows/ci.yml@140ff0528eb09b702a5542f8451f106354dd6b1b
 ```
+
+When bumping the submodule SHA, update both `uses:` lines to match.
 
 ## `trigger.toml` schema
 

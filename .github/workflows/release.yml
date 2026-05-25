@@ -1,0 +1,201 @@
+name: Release (trigger)
+
+# Reusable release workflow. Apps invoke this from their own .github/workflows/
+# with `uses: douglaslassance/trigger/.github/workflows/release.yml@<tag>`.
+#
+# The calling workflow must `secrets: inherit` (or pass each secret explicitly).
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: "Version to build (defaults to ref name when triggered by tag)"
+        required: false
+        type: string
+        default: ""
+      channels:
+        description: "Comma-separated channels to run: direct,appstore,homebrew"
+        required: false
+        type: string
+        default: "direct,homebrew"
+      runner:
+        required: false
+        type: string
+        default: "macos-15"
+
+jobs:
+  build-direct:
+    if: contains(inputs.channels, 'direct')
+    name: Build, notarize, upload (direct)
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Resolve version
+        id: ver
+        run: |
+          V="${{ inputs.version }}"
+          if [ -z "$V" ]; then
+            if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+              V="${GITHUB_REF#refs/tags/}"
+            else
+              V="$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.0)"
+            fi
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+      - name: Import signing certificate
+        env:
+          APPLE_DEVELOPER_CERT: ${{ secrets.APPLE_DEVELOPER_CERT }}
+          APPLE_DEVELOPER_CERT_PASSWORD: ${{ secrets.APPLE_DEVELOPER_CERT_PASSWORD }}
+        run: |
+          CERT_FILE=$(mktemp /tmp/certificate_XXXXXX.p12)
+          echo "$APPLE_DEVELOPER_CERT" | base64 --decode > "$CERT_FILE"
+          KEYCHAIN_PATH=$(mktemp -d)/build.keychain
+          KEYCHAIN_PASSWORD=$(openssl rand -hex 16)
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_FILE" -P "$APPLE_DEVELOPER_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          rm -f "$CERT_FILE"
+
+      - name: Build + notarize
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          NOTARIZATION_KEY: ${{ secrets.NOTARIZATION_KEY }}
+          NOTARIZATION_KEY_ID: ${{ secrets.NOTARIZATION_KEY_ID }}
+          NOTARIZATION_ISSUER_ID: ${{ secrets.NOTARIZATION_ISSUER_ID }}
+          SPARKLE_PUBLIC_KEY: ${{ secrets.SPARKLE_PUBLIC_KEY }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: ./trigger/scripts/build.sh "${{ steps.ver.outputs.version }}"
+
+      - name: Upload to R2
+        env:
+          S3_ACCOUNT_ID: ${{ secrets.S3_ACCOUNT_ID }}
+          S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+          S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
+          S3_PUBLIC_URL: ${{ secrets.S3_PUBLIC_URL }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          CLOUDFLARE_KV_NAMESPACE_ID: ${{ secrets.CLOUDFLARE_KV_NAMESPACE_ID }}
+        run: |
+          if grep -q '^\[r2\]' trigger.toml; then
+            ./trigger/scripts/upload.sh "${{ steps.ver.outputs.version }}"
+          else
+            echo "No [r2] section — skipping upload"
+          fi
+
+      - name: Save artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-direct
+          path: dist/
+          if-no-files-found: error
+
+  homebrew:
+    if: contains(inputs.channels, 'homebrew')
+    name: Homebrew cask PR
+    needs: build-direct
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-direct
+          path: dist/
+
+      - name: Resolve version
+        id: ver
+        run: |
+          V="${{ inputs.version }}"
+          if [ -z "$V" ]; then
+            if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+              V="${GITHUB_REF#refs/tags/}"
+            else
+              V="$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.0)"
+            fi
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      - name: Push to Homebrew tap
+        env:
+          # GitHub forbids the GITHUB_ prefix in secret names; rename HOMEBREW_TAP_TOKEN.
+          GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          HOMEBREW_TAP_URL: ${{ secrets.HOMEBREW_TAP_URL }}
+        run: ./trigger/scripts/push-homebrew.sh --pull-request "${{ steps.ver.outputs.version }}"
+
+  appstore:
+    if: contains(inputs.channels, 'appstore')
+    name: Build + upload (App Store)
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Resolve version
+        id: ver
+        run: |
+          V="${{ inputs.version }}"
+          if [ -z "$V" ]; then
+            if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+              V="${GITHUB_REF#refs/tags/}"
+            else
+              V="$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.0)"
+            fi
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+      - name: Import App Store certificates
+        env:
+          APPSTORE_CERT: ${{ secrets.APPSTORE_CERT }}
+          APPSTORE_CERT_PASSWORD: ${{ secrets.APPSTORE_CERT_PASSWORD }}
+          INSTALLER_CERT: ${{ secrets.INSTALLER_CERT }}
+          INSTALLER_CERT_PASSWORD: ${{ secrets.INSTALLER_CERT_PASSWORD }}
+          PROVISIONING_PROFILE_B64: ${{ secrets.PROVISIONING_PROFILE_B64 }}
+        run: |
+          KEYCHAIN_PATH=$(mktemp -d)/build.keychain
+          KEYCHAIN_PASSWORD=$(openssl rand -hex 16)
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+          for var in APPSTORE_CERT INSTALLER_CERT; do
+            pw_var="${var}_PASSWORD"
+            F=$(mktemp /tmp/${var}_XXXXXX.p12)
+            echo "${!var}" | base64 --decode > "$F"
+            security import "$F" -P "${!pw_var}" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+            rm -f "$F"
+          done
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Provisioning profile
+          PP_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PP_DIR"
+          PROFILE_NAME=$(python3 -c "import tomllib; cfg = tomllib.load(open('trigger.toml','rb')); pp = cfg.get('build', {}).get('provisioning_profile') or f\"{cfg['app']['name']}.provisionprofile\"; print(pp.split('/')[-1])")
+          echo "$PROVISIONING_PROFILE_B64" | base64 --decode > "$PP_DIR/$PROFILE_NAME"
+
+      - name: Build for App Store
+        run: ./trigger/scripts/build-appstore.sh "${{ steps.ver.outputs.version }}"
+
+      - name: Upload to App Store Connect
+        env:
+          NOTARIZATION_KEY: ${{ secrets.NOTARIZATION_KEY }}
+          NOTARIZATION_KEY_ID: ${{ secrets.NOTARIZATION_KEY_ID }}
+          NOTARIZATION_ISSUER_ID: ${{ secrets.NOTARIZATION_ISSUER_ID }}
+        run: ./trigger/scripts/upload-appstore.sh "${{ steps.ver.outputs.version }}"

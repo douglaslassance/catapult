@@ -1,0 +1,54 @@
+# trigger.toml — release configuration for a Swift macOS app.
+# Copy to <app-repo>/trigger.toml and edit for each app.
+
+[app]
+name        = "Peel"                       # display name, .app bundle, executable
+slug        = "peel"                       # lowercase, URL/filename segment
+bundle_id   = "me.douglaslassance.peel"
+team_id     = "556XHQJK3G"
+developer   = "Douglas Lassance"           # signing identity name
+homepage    = "https://peel.douglaslassance.me/"
+description = "Browse different"           # used in Homebrew cask `desc`
+category    = "public.app-category.productivity"
+min_macos   = "13.0"
+
+[build]
+arch          = "arm64"                    # passed to `swift build --arch`
+target_triple = "aarch64-apple-darwin"     # used in DMG filename + URLs
+swift_target  = "App"                      # SPM target name; resource bundle is "${name}_${swift_target}.bundle"
+# Optional overrides (defaults shown):
+# icon                  = "Sources/App/Resources/AppIcon.png"
+# assets                = "Sources/App/Resources/Assets.xcassets"
+# entitlements_direct   = "${name}.entitlements"
+# entitlements_appstore = "${name}-appstore.entitlements"
+# provisioning_profile  = "${name}.provisionprofile"   # filename in ~/Library/MobileDevice/Provisioning Profiles/
+
+# --- Optional channels --- presence of each section enables that channel.
+
+[sparkle]                                  # embed Sparkle in direct build + sign DMG
+feed_url = "https://storage.douglaslassance.me/peel/peel.xml"
+
+[dmg]                                      # always on for direct builds, but lets you set the volume name
+volume_name = "Peel"
+
+[r2]                                       # upload DMG / appcast / KV to Cloudflare R2
+bucket_prefix         = "peel"             # objects land at s3://${bucket}/${bucket_prefix}/
+appcast_filename      = "peel.xml"
+download_url_template = "https://api.douglaslassance.me/peel/download/{version}/{target}"
+# kv_key = "peel"                          # defaults to slug
+
+[homebrew]                                 # push a cask update to a Homebrew tap
+cask_name = "peel"
+# cask_template = "cask.rb"                # path relative to app repo (default)
+
+[appstore]                                 # build .pkg + upload to App Store Connect
+non_exempt_encryption = false
+
+# Free-form Info.plist usage descriptions (NS*UsageDescription)
+[plist.usage_descriptions]
+NSDesktopFolderUsageDescription   = "Peel needs access to browse and display your tagged files."
+NSDocumentsFolderUsageDescription = "Peel needs access to browse and display your tagged files."
+
+# Free-form additional Info.plist keys (string/bool/integer)
+# [plist.extras]
+# LSUIElement = true

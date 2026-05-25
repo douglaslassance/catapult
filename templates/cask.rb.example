@@ -1,0 +1,25 @@
+cask "{{CASK_NAME}}" do
+  version "{{VERSION}}"
+  sha256 "{{SHA256}}"
+
+  url "https://api.douglaslassance.me/{{SLUG}}/download/#{version}/{{TARGET}}"
+  name "{{APP_NAME}}"
+  desc "{{DESCRIPTION}}"
+  homepage "{{HOMEPAGE}}"
+
+  livecheck do
+    url "https://api.douglaslassance.me/{{SLUG}}"
+    strategy :json do |json|
+      json["latest"]
+    end
+  end
+
+  depends_on macos: ">= :ventura"
+
+  app "{{APP_NAME}}.app"
+
+  zap trash: [
+    "~/Library/Containers/{{BUNDLE_ID}}",
+    "~/Library/Application Scripts/{{BUNDLE_ID}}",
+  ]
+end

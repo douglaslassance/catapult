@@ -1,9 +1,9 @@
 #!/bin/bash
-# push-homebrew.sh — Update a Homebrew cask in a tap and optionally open a PR.
+# push_homebrew.sh — Update a Homebrew cask in a tap and optionally open a PR.
 # Requires [homebrew] section in catapult.toml and a cask.rb template in the app
 # repo root (or pointed to via homebrew.cask_template).
 #
-# Usage: push-homebrew.sh [--pull-request] [version]
+# Usage: push_homebrew.sh [--pull-request] [version]
 
 PULL_REQUEST=false
 ARGS=()
@@ -21,7 +21,7 @@ done
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/lib/config.sh"
+source "${SCRIPT_DIR}/config.sh"
 
 if [ -z "${CATAPULT_HAS_HOMEBREW:-}" ]; then
     echo "❌ [homebrew] section missing from catapult.toml"

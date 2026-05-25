@@ -12,7 +12,7 @@ fi
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/lib/config.sh"
+source "${SCRIPT_DIR}/config.sh"
 
 if [ -z "${CATAPULT_HAS_S3:-}" ]; then
     echo "❌ [s3] section missing from catapult.toml"

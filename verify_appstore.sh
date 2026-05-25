@@ -1,15 +1,15 @@
 #!/bin/bash
-# verify-appstore.sh — Sanity-check the Mac App Store build before upload.
+# verify_appstore.sh — Sanity-check the Mac App Store build before upload.
 
 if [[ "$1" == "-h" || "$1" == "--help" ]]; then
-    echo "Usage: verify-appstore.sh"
+    echo "Usage: verify_appstore.sh"
     exit 0
 fi
 
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/lib/config.sh"
+source "${SCRIPT_DIR}/config.sh"
 
 cd "$CATAPULT_APP_ROOT"
 
@@ -30,7 +30,7 @@ echo "🔍 Verifying ${APP_PATH}"
 echo ""
 
 if [ ! -d "$APP_PATH" ]; then
-    fail "App bundle not found at ${APP_PATH}. Run build-appstore.sh first."
+    fail "App bundle not found at ${APP_PATH}. Run build_appstore.sh first."
     exit 1
 fi
 pass "App bundle exists"

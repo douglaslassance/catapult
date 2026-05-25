@@ -1,6 +1,6 @@
 #!/bin/bash
-# upload-appstore.sh — Upload .pkg to App Store Connect.
-# Usage: upload-appstore.sh [version]
+# upload_appstore.sh — Upload .pkg to App Store Connect.
+# Usage: upload_appstore.sh [version]
 
 if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     sed -n '2,3p' "$0" | sed 's/^# \{0,1\}//'
@@ -10,7 +10,7 @@ fi
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/lib/config.sh"
+source "${SCRIPT_DIR}/config.sh"
 
 cd "$CATAPULT_APP_ROOT"
 
@@ -21,7 +21,7 @@ PKG_NAME="${SLUG}-${VERSION}.pkg"
 
 if [ ! -f "${DIST_DIR}/${PKG_NAME}" ]; then
     echo "❌ Package not found: ${DIST_DIR}/${PKG_NAME}"
-    echo "Run build-appstore.sh ${VERSION} first"
+    echo "Run build_appstore.sh ${VERSION} first"
     exit 1
 fi
 

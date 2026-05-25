@@ -3,9 +3,12 @@
 Shared release pipeline for Swift macOS apps. Builds, signs, notarizes, and
 publishes a .app to:
 
-- a notarized **DMG** on Cloudflare R2 (with Sparkle appcast)
+- a notarized **DMG** on Cloudflare R2 (with optional Sparkle appcast)
 - a **Homebrew** cask (PR against any tap)
 - the **Mac App Store** (.pkg via App Store Connect)
+
+Supports both **Swift Package Manager** apps and **Tauri** apps (sharing the
+notarize / upload / Homebrew steps; only the build step differs).
 
 Each app picks which channels it ships through via its `trigger.toml`.
 
@@ -14,7 +17,7 @@ Each app picks which channels it ships through via its `trigger.toml`.
 Add as a git submodule pinned to a tag:
 
 ```sh
-git submodule add -b v0.1.0 https://github.com/douglaslassance/trigger.git trigger
+git submodule add -b 0.1.0 https://github.com/douglaslassance/trigger.git trigger
 ```
 
 Add a `trigger.toml` at the app repo root (copy
@@ -53,7 +56,7 @@ on:
   workflow_dispatch:
 jobs:
   release:
-    uses: douglaslassance/trigger/.github/workflows/release.yml@v0.1.0
+    uses: douglaslassance/trigger/.github/workflows/release.yml@0.1.0
     secrets: inherit
     with:
       channels: "direct,homebrew"   # or "direct,appstore,homebrew"
@@ -65,7 +68,7 @@ name: CI
 on: pull_request
 jobs:
   ci:
-    uses: douglaslassance/trigger/.github/workflows/ci.yml@v0.1.0
+    uses: douglaslassance/trigger/.github/workflows/ci.yml@0.1.0
 ```
 
 ## `trigger.toml` schema
@@ -83,9 +86,11 @@ category    = "public.app-category.productivity"
 min_macos   = "13.0"
 
 [build]
+kind          = "swift"                    # "swift" or "tauri"
 arch          = "arm64"
 target_triple = "aarch64-apple-darwin"
-swift_target  = "App"                      # SPM target name
+swift_target  = "App"                      # SPM target name (swift only)
+# For Tauri: package_manager = "bun" | "pnpm" | "yarn" | "npm"
 
 # Optional sections — presence enables the channel
 [sparkle]

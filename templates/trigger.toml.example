@@ -20,6 +20,7 @@ swift_target  = "App"                      # SPM target name; resource bundle is
 # Optional overrides (defaults shown):
 # executable            = "${name}"        # binary name in .build/release; set if it differs from app.name
 # icon                  = "Sources/App/Resources/AppIcon.png"
+# icon_command          = "swift render_icon.swift build/icon.iconset && iconutil -c icns build/icon.iconset -o build/AppIcon.icns"
 # assets                = "Sources/App/Resources/Assets.xcassets"
 # entitlements_direct   = "${name}.entitlements"
 # entitlements_appstore = "${name}-appstore.entitlements"

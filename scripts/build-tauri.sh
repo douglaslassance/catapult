@@ -10,7 +10,7 @@
 #   6. SHA256
 #
 # Sparkle is intentionally not supported here — Tauri ships its own updater
-# plugin. Use [r2] + push-homebrew.sh downstream just like for Swift apps.
+# plugin. Use [s3] + push-homebrew.sh downstream just like for Swift apps.
 #
 # Usage: build-tauri.sh [version]
 

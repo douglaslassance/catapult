@@ -4,7 +4,7 @@
 Output convention:
   - Scalar values become CATAPULT_<SECTION>_<KEY>=<value> (uppercased).
   - Top-level sections emit CATAPULT_HAS_<SECTION>=1 so scripts can branch
-    on channel presence (e.g. [sparkle], [r2], [homebrew], [appstore]).
+    on channel presence (e.g. [sparkle], [s3], [homebrew], [appstore]).
   - Nested dicts under [plist.usage_descriptions] are intentionally skipped
     here; render_plist.py reads the TOML directly for that.
 

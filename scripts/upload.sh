@@ -1,6 +1,6 @@
 #!/bin/bash
-# upload.sh — Upload DMG (+ Sparkle appcast + KV metadata) to Cloudflare R2.
-# Requires [r2] section in catapult.toml.
+# upload.sh — Upload DMG (+ Sparkle appcast + KV metadata) to S3-compatible storage.
+# Requires [s3] section in catapult.toml.
 #
 # Usage: upload.sh [version]
 
@@ -14,8 +14,8 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/config.sh"
 
-if [ -z "${CATAPULT_HAS_R2:-}" ]; then
-    echo "❌ [r2] section missing from catapult.toml"
+if [ -z "${CATAPULT_HAS_S3:-}" ]; then
+    echo "❌ [s3] section missing from catapult.toml"
     exit 1
 fi
 
@@ -28,17 +28,17 @@ TARGET="$CATAPULT_BUILD_TARGET_TRIPLE"
 DIST_DIR="$CATAPULT_DIST_DIR"
 DMG_FILE="${SLUG}-${VERSION}-${TARGET}.dmg"
 
-BUCKET_PREFIX="${CATAPULT_R2_BUCKET_PREFIX:-$SLUG}"
-APPCAST_FILE_NAME="${CATAPULT_R2_APPCAST_FILENAME:-${SLUG}.xml}"
+BUCKET_PREFIX="${CATAPULT_S3_BUCKET_PREFIX:-$SLUG}"
+APPCAST_FILE_NAME="${CATAPULT_S3_APPCAST_FILENAME:-${SLUG}.xml}"
 # Template uses {version} and {target} placeholders.
-DOWNLOAD_URL_TEMPLATE="${CATAPULT_R2_DOWNLOAD_URL_TEMPLATE:?r2.download_url_template required}"
+DOWNLOAD_URL_TEMPLATE="${CATAPULT_S3_DOWNLOAD_URL_TEMPLATE:?s3.download_url_template required}"
 
 if [ ! -f "${DIST_DIR}/${DMG_FILE}" ]; then
     echo "❌ ${DIST_DIR}/${DMG_FILE} not found — run build.sh first"
     exit 1
 fi
 
-echo "📤 Uploading ${APP_NAME} v${VERSION} to R2..."
+echo "📤 Uploading ${APP_NAME} v${VERSION} to S3..."
 echo ""
 
 missing=()
@@ -137,7 +137,7 @@ elif [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${S3_ACCOUNT_ID:-}" ] || [ -z "
     echo "⚠️  Skipping KV update (CLOUDFLARE_API_TOKEN, S3_ACCOUNT_ID, or CLOUDFLARE_KV_NAMESPACE_ID not set)"
     echo ""
 else
-    KV_KEY="${CATAPULT_R2_KV_KEY:-$SLUG}"
+    KV_KEY="${CATAPULT_S3_KV_KEY:-$SLUG}"
     KV_URL="https://api.cloudflare.com/client/v4/accounts/${S3_ACCOUNT_ID}/storage/kv/namespaces/${CLOUDFLARE_KV_NAMESPACE_ID}/values/${KV_KEY}"
 
     CURRENT_KV=$(curl -s -X GET "$KV_URL" -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" 2>/dev/null)

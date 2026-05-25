@@ -14,19 +14,19 @@ on:
         type: string
         default: ""
       channels:
-        description: "Comma-separated channels to run: direct,appstore,homebrew"
+        description: "Comma-separated channels to run: s3,appstore,homebrew"
         required: false
         type: string
-        default: "direct,homebrew"
+        default: "s3,homebrew"
       runner:
         required: false
         type: string
         default: "macos-15"
 
 jobs:
-  build-direct:
-    if: contains(inputs.channels, 'direct')
-    name: Build, notarize, upload (direct)
+  build-s3:
+    if: contains(inputs.channels, 's3')
+    name: Build, notarize, upload (S3)
     runs-on: ${{ inputs.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -76,7 +76,7 @@ jobs:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: ./catapult/scripts/build.sh "${{ steps.ver.outputs.version }}"
 
-      - name: Upload to R2
+      - name: Upload to S3
         env:
           S3_ACCOUNT_ID: ${{ secrets.S3_ACCOUNT_ID }}
           S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
@@ -87,23 +87,23 @@ jobs:
           CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
           CLOUDFLARE_KV_NAMESPACE_ID: ${{ secrets.CLOUDFLARE_KV_NAMESPACE_ID }}
         run: |
-          if grep -q '^\[r2\]' catapult.toml; then
+          if grep -q '^\[s3\]' catapult.toml; then
             ./catapult/scripts/upload.sh "${{ steps.ver.outputs.version }}"
           else
-            echo "No [r2] section — skipping upload"
+            echo "No [s3] section — skipping upload"
           fi
 
       - name: Save artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: dist-direct
+          name: dist-s3
           path: dist/
           if-no-files-found: error
 
   homebrew:
     if: contains(inputs.channels, 'homebrew')
     name: Homebrew cask PR
-    needs: build-direct
+    needs: build-s3
     runs-on: ${{ inputs.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -112,7 +112,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: dist-direct
+          name: dist-s3
           path: dist/
 
       - name: Resolve version

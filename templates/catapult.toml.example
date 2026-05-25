@@ -39,7 +39,7 @@ feed_url = "https://storage.douglaslassance.me/peel/peel.xml"
 [dmg]                                      # always on for direct builds, but lets you set the volume name
 volume_name = "Peel"
 
-[r2]                                       # upload DMG / appcast / KV to Cloudflare R2
+[s3]                                       # upload DMG / appcast / KV to S3-compatible storage (Cloudflare R2, AWS S3, etc.)
 bucket_prefix         = "peel"             # objects land at s3://${bucket}/${bucket_prefix}/
 appcast_filename      = "peel.xml"
 download_url_template = "https://api.douglaslassance.me/peel/download/{version}/{target}"

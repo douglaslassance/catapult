@@ -1,4 +1,4 @@
-# trigger
+# catapult
 
 Shared release pipeline for Swift macOS apps. Builds, signs, notarizes, and
 publishes a .app to:
@@ -10,27 +10,27 @@ publishes a .app to:
 Supports both **Swift Package Manager** apps and **Tauri** apps (sharing the
 notarize / upload / Homebrew steps; only the build step differs).
 
-Each app picks which channels it ships through via its `trigger.toml`.
+Each app picks which channels it ships through via its `catapult.toml`.
 
-## Consuming trigger from an app
+## Consuming catapult from an app
 
 Add as a git submodule. The submodule itself is always SHA-pinned by git;
 you just pick which commit to start from:
 
 ```sh
-git submodule add https://github.com/douglaslassance/trigger.git trigger
-cd trigger && git checkout <full-sha> && cd ..
-git add .gitmodules trigger
+git submodule add https://github.com/douglaslassance/catapult.git catapult
+cd catapult && git checkout <full-sha> && cd ..
+git add .gitmodules catapult
 ```
 
-`trigger` is intentionally untagged — releases happen by commit. To bump,
-`cd trigger && git fetch && git checkout <new-sha> && cd .. && git add trigger`
+`catapult` is intentionally untagged — releases happen by commit. To bump,
+`cd catapult && git fetch && git checkout <new-sha> && cd .. && git add catapult`
 and commit. GitHub Actions workflows use the same SHA via `@<sha>` refs
-(see below), so the version of trigger that runs in CI matches what's
+(see below), so the version of catapult that runs in CI matches what's
 checked into the submodule.
 
-Add a `trigger.toml` at the app repo root (copy
-[templates/trigger.toml.example](templates/trigger.toml.example) and edit).
+Add a `catapult.toml` at the app repo root (copy
+[templates/catapult.toml.example](templates/catapult.toml.example) and edit).
 
 Add app-specific files at the app repo root:
 - `<AppName>.entitlements` and `<AppName>-appstore.entitlements`
@@ -38,16 +38,17 @@ Add app-specific files at the app repo root:
   and [templates/entitlements-appstore.example](templates/entitlements-appstore.example))
 - `cask.rb` if shipping via Homebrew
   (see [templates/cask.rb.example](templates/cask.rb.example))
+- `.env` for local secrets (copy [templates/env.example](templates/env.example))
 
 ### Local use
 
 ```sh
-./trigger/scripts/build.sh                # direct distribution (DMG)
-./trigger/scripts/build-appstore.sh       # App Store .pkg
-./trigger/scripts/verify-appstore.sh      # post-build sanity checks
-./trigger/scripts/upload.sh               # push DMG/appcast/KV to R2
-./trigger/scripts/upload-appstore.sh      # upload .pkg to App Store Connect
-./trigger/scripts/push-homebrew.sh        # update tap, optionally --pull-request
+./catapult/scripts/build.sh                # direct distribution (DMG)
+./catapult/scripts/build-appstore.sh       # App Store .pkg
+./catapult/scripts/verify-appstore.sh      # post-build sanity checks
+./catapult/scripts/upload.sh               # push DMG/appcast/KV to R2
+./catapult/scripts/upload-appstore.sh      # upload .pkg to App Store Connect
+./catapult/scripts/push-homebrew.sh        # update tap, optionally --pull-request
 ```
 
 All scripts source `.env` from the app root for local secrets.
@@ -67,7 +68,7 @@ on:
   workflow_dispatch:
 jobs:
   release:
-    uses: douglaslassance/trigger/.github/workflows/release.yml@140ff0528eb09b702a5542f8451f106354dd6b1b
+    uses: douglaslassance/catapult/.github/workflows/release.yml@<full-sha>
     secrets: inherit
     with:
       channels: "direct,homebrew"   # or "direct,appstore,homebrew"
@@ -79,12 +80,12 @@ name: CI
 on: pull_request
 jobs:
   ci:
-    uses: douglaslassance/trigger/.github/workflows/ci.yml@140ff0528eb09b702a5542f8451f106354dd6b1b
+    uses: douglaslassance/catapult/.github/workflows/ci.yml@<full-sha>
 ```
 
 When bumping the submodule SHA, update both `uses:` lines to match.
 
-## `trigger.toml` schema
+## `catapult.toml` schema
 
 ```toml
 [app]
@@ -124,7 +125,7 @@ non_exempt_encryption = false
 NSDocumentsFolderUsageDescription = "Peel needs access to browse and display your tagged files."
 ```
 
-See [templates/trigger.toml.example](templates/trigger.toml.example) for the
+See [templates/catapult.toml.example](templates/catapult.toml.example) for the
 full annotated schema, including optional overrides.
 
 ## Required secrets

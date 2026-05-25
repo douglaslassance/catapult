@@ -1,6 +1,6 @@
 #!/bin/bash
 # build.sh — Build a notarized .app + .dmg for direct distribution.
-# Optional Sparkle embedding/signing if [sparkle] is present in trigger.toml.
+# Optional Sparkle embedding/signing if [sparkle] is present in catapult.toml.
 #
 # Usage:   build.sh [version]
 # Version: defaults to latest git tag, or 0.0.0.
@@ -16,18 +16,18 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/config.sh"
 
 # Dispatch by build kind. Swift continues below; Tauri delegates.
-if [ "$TRIGGER_BUILD_KIND" = "tauri" ]; then
+if [ "$CATAPULT_BUILD_KIND" = "tauri" ]; then
     exec "${SCRIPT_DIR}/build-tauri.sh" "$@"
 fi
 
-cd "$TRIGGER_APP_ROOT"
+cd "$CATAPULT_APP_ROOT"
 
 VERSION="${1:-$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")}"
-APP_NAME="$TRIGGER_APP_NAME"
-SLUG="$TRIGGER_APP_SLUG"
-TARGET="$TRIGGER_BUILD_TARGET_TRIPLE"
-BUILD_DIR="$TRIGGER_BUILD_DIR"
-DIST_DIR="$TRIGGER_DIST_DIR"
+APP_NAME="$CATAPULT_APP_NAME"
+SLUG="$CATAPULT_APP_SLUG"
+TARGET="$CATAPULT_BUILD_TARGET_TRIPLE"
+BUILD_DIR="$CATAPULT_BUILD_DIR"
+DIST_DIR="$CATAPULT_DIST_DIR"
 DMG_NAME="${SLUG}-${VERSION}-${TARGET}.dmg"
 APP_PATH="${BUILD_DIR}/${APP_NAME}.app"
 
@@ -47,14 +47,14 @@ mkdir -p "$BUILD_DIR"
 "${SCRIPT_DIR}/lib/icon.sh"
 echo ""
 
-echo "📦 Building ${TRIGGER_BUILD_ARCH} binary..."
-swift build -c release --arch "$TRIGGER_BUILD_ARCH"
+echo "📦 Building ${CATAPULT_BUILD_ARCH} binary..."
+swift build -c release --arch "$CATAPULT_BUILD_ARCH"
 echo ""
 
 echo "📱 Creating app bundle..."
 mkdir -p "${APP_PATH}/Contents/MacOS" "${APP_PATH}/Contents/Resources"
 
-BINARY=".build/release/${TRIGGER_BUILD_EXECUTABLE}"
+BINARY=".build/release/${CATAPULT_BUILD_EXECUTABLE}"
 if [ ! -f "$BINARY" ]; then
     echo "❌ Binary not found: $BINARY"
     exit 1
@@ -69,9 +69,9 @@ cp "${BUILD_DIR}/AppIcon.icns" "${APP_PATH}/Contents/Resources/"
 [ -f LICENSE ] && cp LICENSE "${APP_PATH}/Contents/Resources/"
 
 # SPM resource bundle (Bundle.module support)
-BUNDLE_PATH="${APP_PATH}/Contents/Resources/${TRIGGER_APP_RESOURCE_BUNDLE_NAME}"
-if [ -d ".build/release/${TRIGGER_APP_RESOURCE_BUNDLE_NAME}" ]; then
-    cp -r ".build/release/${TRIGGER_APP_RESOURCE_BUNDLE_NAME}" "${BUNDLE_PATH}"
+BUNDLE_PATH="${APP_PATH}/Contents/Resources/${CATAPULT_APP_RESOURCE_BUNDLE_NAME}"
+if [ -d ".build/release/${CATAPULT_APP_RESOURCE_BUNDLE_NAME}" ]; then
+    cp -r ".build/release/${CATAPULT_APP_RESOURCE_BUNDLE_NAME}" "${BUNDLE_PATH}"
     echo "✅ Resource bundle copied"
 else
     # Some packages (no `resources:` in target) don't emit a resource bundle.
@@ -80,19 +80,19 @@ else
     echo "ℹ️  No SPM resource bundle in .build/release — skipping"
 fi
 
-if [ -n "$BUNDLE_PATH" ] && [ -d "$TRIGGER_BUILD_ASSETS" ]; then
+if [ -n "$BUNDLE_PATH" ] && [ -d "$CATAPULT_BUILD_ASSETS" ]; then
     echo "🎨 Compiling asset catalog..."
     xcrun actool \
         --compile "${BUNDLE_PATH}" \
         --platform macosx \
-        --minimum-deployment-target "$TRIGGER_APP_MIN_MACOS" \
+        --minimum-deployment-target "$CATAPULT_APP_MIN_MACOS" \
         --target-device mac \
         --output-format human-readable-text \
-        "$TRIGGER_BUILD_ASSETS" 2>&1 | grep -v "^$" || true
+        "$CATAPULT_BUILD_ASSETS" 2>&1 | grep -v "^$" || true
 fi
 
 # Info.plist for the app bundle
-python3 "${SCRIPT_DIR}/lib/render_plist.py" "$TRIGGER_CONFIG" \
+python3 "${SCRIPT_DIR}/lib/render_plist.py" "$CATAPULT_CONFIG" \
     --kind direct --version "$VERSION" \
     --out "${APP_PATH}/Contents/Info.plist"
 
@@ -100,13 +100,13 @@ echo "APPL????" > "${APP_PATH}/Contents/PkgInfo"
 
 # Resource bundle Info.plist (codesign/notarization scanner expects one)
 if [ -n "$BUNDLE_PATH" ]; then
-    python3 "${SCRIPT_DIR}/lib/render_plist.py" "$TRIGGER_CONFIG" \
+    python3 "${SCRIPT_DIR}/lib/render_plist.py" "$CATAPULT_CONFIG" \
         --kind resource --version "$VERSION" \
         --out "${BUNDLE_PATH}/Info.plist"
 fi
 
 # Sparkle embedding (optional)
-if [ -n "${TRIGGER_HAS_SPARKLE:-}" ]; then
+if [ -n "${CATAPULT_HAS_SPARKLE:-}" ]; then
     SPARKLE_XCFRAMEWORK=$(find .build/artifacts -name "Sparkle.xcframework" -type d 2>/dev/null | head -1)
     if [ -n "$SPARKLE_XCFRAMEWORK" ]; then
         echo "🔗 Embedding Sparkle..."
@@ -152,12 +152,12 @@ if command -v codesign &>/dev/null; then
                 "${APP_PATH}/Contents/Frameworks/Sparkle.framework"
         fi
         codesign --force --sign "$APPLE_SIGNING_IDENTITY" \
-            --entitlements "$TRIGGER_BUILD_ENTITLEMENTS_DIRECT" \
+            --entitlements "$CATAPULT_BUILD_ENTITLEMENTS_DIRECT" \
             --options runtime --timestamp \
             "${APP_PATH}"
     else
         echo "🔏 Code signing with ad-hoc identity (local build)..."
-        codesign --force --sign - --entitlements "$TRIGGER_BUILD_ENTITLEMENTS_DIRECT" \
+        codesign --force --sign - --entitlements "$CATAPULT_BUILD_ENTITLEMENTS_DIRECT" \
             "${APP_PATH}" || echo "⚠️  Code signing skipped"
     fi
 fi
@@ -168,7 +168,7 @@ echo ""
 # DMG
 echo "💿 Creating DMG..."
 rm -f "${DIST_DIR}/${DMG_NAME}"
-VOLNAME="${TRIGGER_DMG_VOLUME_NAME:-$APP_NAME}"
+VOLNAME="${CATAPULT_DMG_VOLUME_NAME:-$APP_NAME}"
 DMG_MOUNT="/tmp/${SLUG}-dmg-$$"
 DMG_TEMP="/tmp/${SLUG}-temp-$$.dmg"
 mkdir -p "$DMG_MOUNT"
@@ -249,7 +249,7 @@ cat "${DIST_DIR}/${DMG_NAME}.sha256"
 echo ""
 
 # Sparkle signature (optional)
-if [ -n "${TRIGGER_HAS_SPARKLE:-}" ]; then
+if [ -n "${CATAPULT_HAS_SPARKLE:-}" ]; then
     SPARKLE_BIN=$(find .build/artifacts -name "sign_update" 2>/dev/null | head -1)
     if [ -z "$SPARKLE_BIN" ]; then
         echo "⚠️  sign_update not found — skipping Sparkle signing"

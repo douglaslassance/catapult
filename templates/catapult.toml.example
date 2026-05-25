@@ -1,5 +1,5 @@
-# trigger.toml — release configuration for a Swift macOS app.
-# Copy to <app-repo>/trigger.toml and edit for each app.
+# catapult.toml — release configuration for a Swift macOS app.
+# Copy to <app-repo>/catapult.toml and edit for each app.
 
 [app]
 name        = "Peel"                       # display name, .app bundle, executable
@@ -54,7 +54,7 @@ non_exempt_encryption = false
 
 # Two modes for the Info.plist:
 #
-# A) Generated (default) — built from trigger.toml fields. List usage
+# A) Generated (default) — built from catapult.toml fields. List usage
 #    descriptions and any extra string/bool/int keys here.
 [plist.usage_descriptions]
 NSDesktopFolderUsageDescription   = "Peel needs access to browse and display your tagged files."

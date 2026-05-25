@@ -12,11 +12,11 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/config.sh"
 
-cd "$TRIGGER_APP_ROOT"
+cd "$CATAPULT_APP_ROOT"
 
 VERSION="${1:-$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")}"
-SLUG="$TRIGGER_APP_SLUG"
-DIST_DIR="$TRIGGER_DIST_DIR"
+SLUG="$CATAPULT_APP_SLUG"
+DIST_DIR="$CATAPULT_DIST_DIR"
 PKG_NAME="${SLUG}-${VERSION}.pkg"
 
 if [ ! -f "${DIST_DIR}/${PKG_NAME}" ]; then
@@ -35,7 +35,7 @@ if (( ${#missing[@]} )); then
     exit 1
 fi
 
-echo "🚀 Uploading ${TRIGGER_APP_NAME} v${VERSION} to App Store Connect..."
+echo "🚀 Uploading ${CATAPULT_APP_NAME} v${VERSION} to App Store Connect..."
 echo ""
 
 PRIVATE_KEYS_DIR="$HOME/.appstoreconnect/private_keys"

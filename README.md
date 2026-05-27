@@ -55,9 +55,8 @@ All scripts source `.env` from the app root for local secrets.
 
 ### GitHub Actions
 
-Use the reusable workflows from each app's `.github/workflows/`. Pin to
-the same full SHA as your submodule — never `@main`. GitHub Actions
-accepts full commit SHAs as refs:
+Catapult ships one reusable workflow — `release.yml` — for the release
+pipeline. Pin to the same full SHA as your submodule (never `@main`):
 
 ```yaml
 # .github/workflows/cd.yml
@@ -74,16 +73,15 @@ jobs:
       channels: "s3,homebrew"   # or "s3,appstore,homebrew"
 ```
 
-```yaml
-# .github/workflows/ci.yml
-name: CI
-on: pull_request
-jobs:
-  ci:
-    uses: douglaslassance/catapult/.github/workflows/ci.yml@<full-sha>
-```
+When bumping the submodule SHA, update the `uses:` line to match.
 
-When bumping the submodule SHA, update both `uses:` lines to match.
+### Scope: release, not CI
+
+Catapult is a **release** framework, not a CI framework. Each app implements
+its own `ci.yml` (lint / build / test) — Swift apps want different tooling
+than Tauri apps, and forcing a shared CI shape ends in conditionals. The
+release pipeline is genuinely shared (codesign + notarize + DMG + upload +
+homebrew are identical per app); CI isn't.
 
 ## `catapult.toml` schema
 

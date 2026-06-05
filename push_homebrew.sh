@@ -86,6 +86,9 @@ if ! git remote get-url upstream >/dev/null 2>&1; then
 fi
 
 git fetch upstream
+# Park HEAD on main before resetting so a parallel run's in-progress
+# bump branch can't be silently moved out from under it.
+git checkout main 2>/dev/null || git checkout -B main upstream/main
 git reset --hard upstream/main
 echo ""
 

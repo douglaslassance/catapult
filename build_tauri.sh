@@ -126,6 +126,26 @@ if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
     echo ""
 fi
 
+# Updater artifacts — `tauri build` produces these when:
+#   - `bundle.createUpdaterArtifacts: true` is set in tauri.conf.json
+#   - `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
+#     env vars are set when invoking the build
+# Copy them to dist/ with versioned filenames parallel to the DMG so
+# upload.sh can pick them up without parsing Tauri's bundle layout.
+UPDATER_SRC_TAR="${TAURI_DIR}/target/release/bundle/macos/${APP_NAME}.app.tar.gz"
+UPDATER_SRC_SIG="${UPDATER_SRC_TAR}.sig"
+UPDATER_TAR_NAME="${SLUG}-${VERSION}-${TARGET}.tar.gz"
+if [ -f "$UPDATER_SRC_TAR" ] && [ -f "$UPDATER_SRC_SIG" ]; then
+    cp "$UPDATER_SRC_TAR" "${DIST_DIR}/${UPDATER_TAR_NAME}"
+    cp "$UPDATER_SRC_SIG" "${DIST_DIR}/${UPDATER_TAR_NAME}.sig"
+    echo "✅ Updater artifacts produced (${UPDATER_TAR_NAME}{,.sig})"
+    echo ""
+elif [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+    echo "⚠️  TAURI_SIGNING_PRIVATE_KEY set but no .tar.gz produced — check that"
+    echo "   bundle.createUpdaterArtifacts is true in ${TAURI_DIR}/tauri.conf.json"
+    echo ""
+fi
+
 # 6. Notarize + staple
 if [ -n "${NOTARIZATION_KEY_ID:-}" ] && [ -n "${NOTARIZATION_ISSUER_ID:-}" ] && [ -n "${NOTARIZATION_KEY:-}" ]; then
     echo "📝 Submitting for notarization..."

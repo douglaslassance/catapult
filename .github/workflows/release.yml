@@ -5,8 +5,10 @@ name: Release (catapult)
 #
 # The calling workflow must `secrets: inherit` (or pass each secret explicitly).
 #
-# Mirrors the local `catapult/release.sh` flow — the difference is only the
-# certificate-import prelude, which CI needs and a local Keychain already has.
+# Each job runs `catapult/release.sh --channels <one>` after importing the
+# certificates it needs. The script is the same one used locally — the only
+# difference is the cert-import prelude, which a developer's Keychain already
+# has. Jobs run in parallel (homebrew + appstore, after build-s3 completes).
 
 on:
   workflow_call:
@@ -27,8 +29,9 @@ on:
         default: "macos-15"
 
 jobs:
-  release:
-    name: Release
+  build-s3:
+    if: contains(inputs.channels, 's3')
+    name: Build, notarize, upload (S3)
     runs-on: ${{ inputs.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -51,54 +54,24 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 
-      - name: Set up Keychain
-        id: keychain
-        run: |
-          KEYCHAIN_PATH=$(mktemp -d)/build.keychain
-          KEYCHAIN_PASSWORD=$(openssl rand -hex 16)
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security list-keychain -d user -s "$KEYCHAIN_PATH"
-          echo "path=$KEYCHAIN_PATH" >> "$GITHUB_OUTPUT"
-          echo "password=$KEYCHAIN_PASSWORD" >> "$GITHUB_OUTPUT"
-
       - name: Import Developer ID certificate
-        if: contains(inputs.channels, 's3')
         env:
           APPLE_DEVELOPER_CERT: ${{ secrets.APPLE_DEVELOPER_CERT }}
           APPLE_DEVELOPER_CERT_PASSWORD: ${{ secrets.APPLE_DEVELOPER_CERT_PASSWORD }}
         run: |
           CERT_FILE=$(mktemp /tmp/certificate_XXXXXX.p12)
           echo "$APPLE_DEVELOPER_CERT" | base64 --decode > "$CERT_FILE"
-          security import "$CERT_FILE" -P "$APPLE_DEVELOPER_CERT_PASSWORD" -A -t cert -f pkcs12 -k "${{ steps.keychain.outputs.path }}"
+          KEYCHAIN_PATH=$(mktemp -d)/build.keychain
+          KEYCHAIN_PASSWORD=$(openssl rand -hex 16)
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_FILE" -P "$APPLE_DEVELOPER_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           rm -f "$CERT_FILE"
-          security set-key-partition-list -S apple-tool:,apple: -s -k "${{ steps.keychain.outputs.password }}" "${{ steps.keychain.outputs.path }}"
 
-      - name: Import App Store certificates + provisioning profile
-        if: contains(inputs.channels, 'appstore')
-        env:
-          APPSTORE_CERT: ${{ secrets.APPSTORE_CERT }}
-          APPSTORE_CERT_PASSWORD: ${{ secrets.APPSTORE_CERT_PASSWORD }}
-          INSTALLER_CERT: ${{ secrets.INSTALLER_CERT }}
-          INSTALLER_CERT_PASSWORD: ${{ secrets.INSTALLER_CERT_PASSWORD }}
-          PROVISIONING_PROFILE_B64: ${{ secrets.PROVISIONING_PROFILE_B64 }}
-        run: |
-          for var in APPSTORE_CERT INSTALLER_CERT; do
-            pw_var="${var}_PASSWORD"
-            F=$(mktemp /tmp/${var}_XXXXXX.p12)
-            echo "${!var}" | base64 --decode > "$F"
-            security import "$F" -P "${!pw_var}" -A -t cert -f pkcs12 -k "${{ steps.keychain.outputs.path }}"
-            rm -f "$F"
-          done
-          security set-key-partition-list -S apple-tool:,apple: -s -k "${{ steps.keychain.outputs.password }}" "${{ steps.keychain.outputs.path }}"
-
-          PP_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
-          mkdir -p "$PP_DIR"
-          PROFILE_NAME=$(python3 -c "import tomllib; cfg = tomllib.load(open('catapult.toml','rb')); pp = cfg.get('build', {}).get('provisioning_profile') or f\"{cfg['app']['name']}.provisionprofile\"; print(pp.split('/')[-1])")
-          echo "$PROVISIONING_PROFILE_B64" | base64 --decode > "$PP_DIR/$PROFILE_NAME"
-
-      - name: Run release
+      - name: Build, notarize, upload
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           NOTARIZATION_KEY: ${{ secrets.NOTARIZATION_KEY }}
@@ -114,13 +87,106 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
           CLOUDFLARE_KV_NAMESPACE_ID: ${{ secrets.CLOUDFLARE_KV_NAMESPACE_ID }}
-          HOMEBREW_TAP_ACCESS_TOKEN: ${{ secrets.HOMEBREW_TAP_ACCESS_TOKEN }}
-          HOMEBREW_TAP_URL: ${{ secrets.HOMEBREW_TAP_URL }}
-        run: ./catapult/release.sh "${{ steps.ver.outputs.version }}" --channels "${{ inputs.channels }}"
+        run: ./catapult/release.sh "${{ steps.ver.outputs.version }}" --channels s3
 
       - name: Save artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: dist
+          name: dist-s3
           path: dist/
           if-no-files-found: error
+
+  homebrew:
+    if: contains(inputs.channels, 'homebrew')
+    name: Homebrew cask PR
+    needs: build-s3
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-s3
+          path: dist/
+
+      - name: Resolve version
+        id: ver
+        run: |
+          V="${{ inputs.version }}"
+          if [ -z "$V" ]; then
+            if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+              V="${GITHUB_REF#refs/tags/}"
+            else
+              V="$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.0)"
+            fi
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      - name: Push Homebrew cask
+        env:
+          HOMEBREW_TAP_ACCESS_TOKEN: ${{ secrets.HOMEBREW_TAP_ACCESS_TOKEN }}
+          HOMEBREW_TAP_URL: ${{ secrets.HOMEBREW_TAP_URL }}
+        run: ./catapult/release.sh "${{ steps.ver.outputs.version }}" --channels homebrew
+
+  appstore:
+    if: contains(inputs.channels, 'appstore')
+    name: Build + upload (App Store)
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Resolve version
+        id: ver
+        run: |
+          V="${{ inputs.version }}"
+          if [ -z "$V" ]; then
+            if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+              V="${GITHUB_REF#refs/tags/}"
+            else
+              V="$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.0)"
+            fi
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+      - name: Import App Store certificates + provisioning profile
+        env:
+          APPSTORE_CERT: ${{ secrets.APPSTORE_CERT }}
+          APPSTORE_CERT_PASSWORD: ${{ secrets.APPSTORE_CERT_PASSWORD }}
+          INSTALLER_CERT: ${{ secrets.INSTALLER_CERT }}
+          INSTALLER_CERT_PASSWORD: ${{ secrets.INSTALLER_CERT_PASSWORD }}
+          PROVISIONING_PROFILE_B64: ${{ secrets.PROVISIONING_PROFILE_B64 }}
+        run: |
+          KEYCHAIN_PATH=$(mktemp -d)/build.keychain
+          KEYCHAIN_PASSWORD=$(openssl rand -hex 16)
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+          for var in APPSTORE_CERT INSTALLER_CERT; do
+            pw_var="${var}_PASSWORD"
+            F=$(mktemp /tmp/${var}_XXXXXX.p12)
+            echo "${!var}" | base64 --decode > "$F"
+            security import "$F" -P "${!pw_var}" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+            rm -f "$F"
+          done
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          PP_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PP_DIR"
+          PROFILE_NAME=$(python3 -c "import tomllib; cfg = tomllib.load(open('catapult.toml','rb')); pp = cfg.get('build', {}).get('provisioning_profile') or f\"{cfg['app']['name']}.provisionprofile\"; print(pp.split('/')[-1])")
+          echo "$PROVISIONING_PROFILE_B64" | base64 --decode > "$PP_DIR/$PROFILE_NAME"
+
+      - name: Build + upload App Store
+        env:
+          NOTARIZATION_KEY: ${{ secrets.NOTARIZATION_KEY }}
+          NOTARIZATION_KEY_ID: ${{ secrets.NOTARIZATION_KEY_ID }}
+          NOTARIZATION_ISSUER_ID: ${{ secrets.NOTARIZATION_ISSUER_ID }}
+        run: ./catapult/release.sh "${{ steps.ver.outputs.version }}" --channels appstore

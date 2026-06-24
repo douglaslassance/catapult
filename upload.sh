@@ -129,6 +129,106 @@ APPCAST
     fi
 fi
 
+# Tauri updater manifest — analogous to the Sparkle appcast above but for
+# Tauri apps. Generates s3://${bucket}/${prefix}/${slug}.json in the format
+# the `tauri-plugin-updater` plugin expects, and uploads the matching
+# ${slug}-${version}-${target}.tar.gz bundle next to it. Read-modify-write
+# so a second-target build for the same version adds an entry rather than
+# wiping the first.
+if [ "$CATAPULT_BUILD_KIND" = "tauri" ]; then
+    if [ "$IS_PRERELEASE" = "1" ]; then
+        echo "⚠️  Skipping Tauri manifest update (pre-release: $VERSION)"
+        echo ""
+    else
+        UPDATER_TAR="${SLUG}-${VERSION}-${TARGET}.tar.gz"
+        UPDATER_SIG_FILE="${DIST_DIR}/${UPDATER_TAR}.sig"
+        TAURI_MANIFEST_NAME="${SLUG}.json"
+        if [ ! -f "${DIST_DIR}/${UPDATER_TAR}" ] || [ ! -f "${UPDATER_SIG_FILE}" ]; then
+            echo "⚠️  Updater artifacts not found in ${DIST_DIR} (${UPDATER_TAR}{,.sig})"
+            echo "   — Tauri signing keys probably weren't set during build. Skipping."
+            echo ""
+        else
+            echo "☁️  Uploading updater bundle..."
+            aws s3 cp \
+                "${DIST_DIR}/${UPDATER_TAR}" \
+                "s3://${S3_BUCKET_NAME}/${BUCKET_PREFIX}/${UPDATER_TAR}" \
+                --endpoint-url "$R2_ENDPOINT"
+            echo "✅ ${UPDATER_TAR} uploaded"
+
+            SIG_CONTENT=$(cat "$UPDATER_SIG_FILE")
+            PUB_DATE_ISO=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+            # Updater bundle URL goes straight to S3, not through the API
+            # download route. The /download route assumes a single extension
+            # per app (DMG for humans); the in-app updater needs the .tar.gz
+            # and the two would collide on the same target key. Trade-off:
+            # auto-update downloads aren't counted in /{app}/stats. If we
+            # want them counted, add a separate /{app}/updater/{version}/{target}
+            # endpoint to api.douglaslassance.me.
+            DL_URL="${S3_PUBLIC_URL:-https://s3.douglaslassance.me}/${BUCKET_PREFIX}/${UPDATER_TAR}"
+            # Tauri keys platforms by `darwin-aarch64` / `darwin-x86_64` rather
+            # than the Rust triples we use everywhere else; translate so the
+            # client's auto-detected platform string matches.
+            case "$TARGET" in
+                aarch64-apple-darwin) TAURI_TARGET="darwin-aarch64" ;;
+                x86_64-apple-darwin)  TAURI_TARGET="darwin-x86_64" ;;
+                *) TAURI_TARGET="$TARGET" ;;
+            esac
+
+            EXISTING=$(aws s3 cp \
+                "s3://${S3_BUCKET_NAME}/${BUCKET_PREFIX}/${TAURI_MANIFEST_NAME}" - \
+                --endpoint-url "$R2_ENDPOINT" 2>/dev/null || true)
+
+            MANIFEST_FILE=$(mktemp /tmp/tauri_manifest_XXXXXX.json)
+            python3 - "$VERSION" "$PUB_DATE_ISO" "$TAURI_TARGET" "$SIG_CONTENT" "$DL_URL" "$EXISTING" > "$MANIFEST_FILE" <<'PYEOF'
+import json, sys
+version, pub_date, target, sig, url, existing = sys.argv[1:7]
+try:
+    manifest = json.loads(existing) if existing else {}
+except Exception:
+    manifest = {}
+# A new version invalidates the previous platforms map — never serve a
+# mixed-version manifest. Same version → merge in the new target.
+if manifest.get('version') != version:
+    manifest = {'version': version, 'platforms': {}}
+manifest['pub_date'] = pub_date
+manifest.setdefault('notes', '')
+manifest.setdefault('platforms', {})
+manifest['platforms'][target] = {'signature': sig, 'url': url}
+print(json.dumps(manifest, indent=2))
+PYEOF
+
+            echo "☁️  Uploading ${TAURI_MANIFEST_NAME}..."
+            aws s3 cp "$MANIFEST_FILE" \
+                "s3://${S3_BUCKET_NAME}/${BUCKET_PREFIX}/${TAURI_MANIFEST_NAME}" \
+                --content-type "application/json" \
+                --endpoint-url "$R2_ENDPOINT"
+            rm -f "$MANIFEST_FILE"
+            echo "✅ ${TAURI_MANIFEST_NAME} updated"
+
+            # Public ACL on both — the in-app updater has no R2 creds.
+            aws s3api put-object-acl \
+                --bucket "$S3_BUCKET_NAME" \
+                --key "${BUCKET_PREFIX}/${UPDATER_TAR}" \
+                --acl public-read \
+                --endpoint-url "$R2_ENDPOINT" 2>/dev/null || true
+            aws s3api put-object-acl \
+                --bucket "$S3_BUCKET_NAME" \
+                --key "${BUCKET_PREFIX}/${TAURI_MANIFEST_NAME}" \
+                --acl public-read \
+                --endpoint-url "$R2_ENDPOINT" 2>/dev/null || true
+
+            if [ -n "${CLOUDFLARE_API_TOKEN:-}" ] && [ -n "${CLOUDFLARE_ZONE_ID:-}" ] && [ -n "${S3_PUBLIC_URL:-}" ]; then
+                PURGE=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/purge_cache" \
+                    -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+                    -H "Content-Type: application/json" \
+                    --data "{\"files\":[\"${S3_PUBLIC_URL}/${BUCKET_PREFIX}/${TAURI_MANIFEST_NAME}\"]}")
+                echo "$PURGE" | grep -q '"success":true' && echo "✅ Manifest cache purged" || echo "⚠️  Manifest cache purge failed"
+            fi
+            echo ""
+        fi
+    fi
+fi
+
 # KV metadata (drives Homebrew livecheck)
 if [ "$IS_PRERELEASE" = "1" ]; then
     echo "⚠️  Skipping KV update (pre-release: $VERSION)"

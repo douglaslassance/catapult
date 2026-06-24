@@ -15,8 +15,13 @@ CATAPULT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CATAPULT_APP_ROOT="${CATAPULT_APP_ROOT:-$(pwd)}"
 CATAPULT_CONFIG="${CATAPULT_CONFIG:-${CATAPULT_APP_ROOT}/catapult.toml}"
 
-# Optional .env for local secrets
-[ -f "${CATAPULT_APP_ROOT}/.env" ] && source "${CATAPULT_APP_ROOT}/.env"
+# Optional .env for local secrets. `set -a` auto-exports every assignment so
+# subprocesses (notably python helpers like render_plist.py) see the values.
+if [ -f "${CATAPULT_APP_ROOT}/.env" ]; then
+    set -a
+    source "${CATAPULT_APP_ROOT}/.env"
+    set +a
+fi
 
 if [ ! -f "$CATAPULT_CONFIG" ]; then
     echo "❌ catapult: $CATAPULT_CONFIG not found" >&2

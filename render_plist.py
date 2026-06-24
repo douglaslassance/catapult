@@ -101,6 +101,8 @@ def render_generated(cfg: dict, kind: str, version: str, build_number: str) -> s
     if kind == "direct" and "sparkle" in cfg:
         feed_url = cfg["sparkle"]["feed_url"]
         public_key = os.environ.get("SPARKLE_PUBLIC_KEY", "")
+        if not public_key:
+            sys.exit("error: SPARKLE_PUBLIC_KEY is required when [sparkle] is set in catapult.toml")
         lines += [
             "    <key>SUFeedURL</key>",
             f"    <string>{xml_escape(feed_url)}</string>",
@@ -155,8 +157,11 @@ def render_passthrough(cfg: dict, kind: str, version: str, build_number: str,
             plist["LSApplicationCategoryType"] = cfg["app"]["category"]
 
     if kind == "direct" and "sparkle" in cfg:
+        public_key = os.environ.get("SPARKLE_PUBLIC_KEY", "")
+        if not public_key:
+            sys.exit("error: SPARKLE_PUBLIC_KEY is required when [sparkle] is set in catapult.toml")
         plist["SUFeedURL"] = cfg["sparkle"]["feed_url"]
-        plist["SUPublicEDKey"] = os.environ.get("SPARKLE_PUBLIC_KEY", "")
+        plist["SUPublicEDKey"] = public_key
 
     return plistlib.dumps(plist).decode("utf-8")
 

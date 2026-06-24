@@ -42,6 +42,17 @@ Add app-specific files at the app repo root:
 
 ### Local use
 
+For a full release, use the orchestration script — it runs the same flow as
+the CD workflow:
+
+```sh
+./catapult/release.sh                                  # s3 + homebrew (default)
+./catapult/release.sh 1.2.3                            # explicit version
+./catapult/release.sh --channels s3,homebrew,appstore  # all channels
+```
+
+Individual scripts are also available if you need to run just one step:
+
 ```sh
 ./catapult/build.sh                # direct distribution (DMG)
 ./catapult/build_appstore.sh       # App Store .pkg
@@ -52,6 +63,12 @@ Add app-specific files at the app repo root:
 ```
 
 All scripts source `.env` from the app root for local secrets.
+
+> **Sparkle parity.** Declaring `[sparkle]` in `catapult.toml` enables embedding
+> + signing in the direct build, but you must also `import Sparkle` in your
+> `Package.swift` and wire `SPUStandardUpdaterController` into your app. If
+> the framework isn't a Swift Package dependency, the build script logs a
+> warning and continues without embedding.
 
 ### GitHub Actions
 

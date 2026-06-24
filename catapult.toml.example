@@ -34,6 +34,9 @@ swift_target  = "App"                      # SPM target name; resource bundle is
 # --- Optional channels --- presence of each section enables that channel.
 
 [sparkle]                                  # embed Sparkle in direct build + sign DMG
+# Requires `import Sparkle` in Package.swift and SPUStandardUpdaterController
+# wired in the app. Without that dependency the build script warns and skips
+# embedding — the [sparkle] section alone doesn't pull Sparkle in.
 feed_url = "https://example.com/myapp/myapp.xml"
 
 [dmg]                                      # always on for direct builds, but lets you set the volume name

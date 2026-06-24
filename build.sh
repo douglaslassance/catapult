@@ -126,8 +126,8 @@ if [ -n "${CATAPULT_HAS_SPARKLE:-}" ]; then
     echo ""
 fi
 
-# Code sign (Developer ID — note: peel uses --preserve-metadata=entitlements for
-# nested binaries, only applying the app's own entitlements file to the top bundle)
+# Code sign (Developer ID — nested binaries use --preserve-metadata=entitlements;
+# only the top bundle gets the app's own entitlements file)
 if command -v codesign &>/dev/null; then
     if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
         echo "🔏 Code signing with Developer ID..."

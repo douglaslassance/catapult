@@ -2,13 +2,13 @@
 # Copy to <app-repo>/catapult.toml and edit for each app.
 
 [app]
-name        = "Peel"                       # display name, .app bundle, executable
-slug        = "peel"                       # lowercase, URL/filename segment
-bundle_id   = "me.douglaslassance.peel"
+name        = "MyApp"                       # display name, .app bundle, executable
+slug        = "myapp"                       # lowercase, URL/filename segment
+bundle_id   = "com.example.myapp"
 team_id     = "556XHQJK3G"
 developer   = "Douglas Lassance"           # signing identity name
-homepage    = "https://peel.douglaslassance.me/"
-description = "Browse different"           # used in Homebrew cask `desc`
+homepage    = "https://example.com/myapp"
+description = "Short tagline"              # used in Homebrew cask `desc`
 category    = "public.app-category.productivity"
 min_macos   = "13.0"
 
@@ -34,19 +34,19 @@ swift_target  = "App"                      # SPM target name; resource bundle is
 # --- Optional channels --- presence of each section enables that channel.
 
 [sparkle]                                  # embed Sparkle in direct build + sign DMG
-feed_url = "https://storage.douglaslassance.me/peel/peel.xml"
+feed_url = "https://example.com/myapp/myapp.xml"
 
 [dmg]                                      # always on for direct builds, but lets you set the volume name
-volume_name = "Peel"
+volume_name = "MyApp"
 
 [s3]                                       # upload DMG / appcast / KV to S3-compatible storage (Cloudflare R2, AWS S3, etc.)
-bucket_prefix         = "peel"             # objects land at s3://${bucket}/${bucket_prefix}/
-appcast_filename      = "peel.xml"
-download_url_template = "https://api.douglaslassance.me/peel/download/{version}/{target}"
-# kv_key = "peel"                          # defaults to slug
+bucket_prefix         = "myapp"             # objects land at s3://${bucket}/${bucket_prefix}/
+appcast_filename      = "myapp.xml"
+download_url_template = "https://example.com/myapp/download/{version}/{target}"
+# kv_key = "myapp"                          # defaults to slug
 
 [homebrew]                                 # push a cask update to a Homebrew tap
-cask_name = "peel"
+cask_name = "myapp"
 # cask_template = "cask.rb"                # path relative to app repo (default)
 
 [appstore]                                 # build .pkg + upload to App Store Connect
@@ -57,8 +57,8 @@ non_exempt_encryption = false
 # A) Generated (default) — built from catapult.toml fields. List usage
 #    descriptions and any extra string/bool/int keys here.
 [plist.usage_descriptions]
-NSDesktopFolderUsageDescription   = "Peel needs access to browse and display your tagged files."
-NSDocumentsFolderUsageDescription = "Peel needs access to browse and display your tagged files."
+NSDesktopFolderUsageDescription   = "MyApp needs access to your Desktop folder."
+NSDocumentsFolderUsageDescription = "MyApp needs access to your Documents folder."
 
 # [plist.extras]
 # LSUIElement = true

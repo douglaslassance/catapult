@@ -15,7 +15,7 @@ CATAPULT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CATAPULT_APP_ROOT="${CATAPULT_APP_ROOT:-$(pwd)}"
 CATAPULT_CONFIG="${CATAPULT_CONFIG:-${CATAPULT_APP_ROOT}/catapult.toml}"
 
-# Optional .env (matches peel's convention)
+# Optional .env for local secrets
 [ -f "${CATAPULT_APP_ROOT}/.env" ] && source "${CATAPULT_APP_ROOT}/.env"
 
 if [ ! -f "$CATAPULT_CONFIG" ]; then

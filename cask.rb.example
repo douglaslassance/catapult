@@ -2,13 +2,13 @@ cask "{{CASK_NAME}}" do
   version "{{VERSION}}"
   sha256 "{{SHA256}}"
 
-  url "https://api.douglaslassance.me/{{SLUG}}/download/#{version}/{{TARGET}}"
+  url "https://example.com/{{SLUG}}/download/#{version}/{{TARGET}}"
   name "{{APP_NAME}}"
   desc "{{DESCRIPTION}}"
   homepage "{{HOMEPAGE}}"
 
   livecheck do
-    url "https://api.douglaslassance.me/{{SLUG}}"
+    url "https://example.com/{{SLUG}}"
     strategy :json do |json|
       json["latest"]
     end

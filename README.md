@@ -87,12 +87,12 @@ homebrew are identical per app); CI isn't.
 
 ```toml
 [app]
-name        = "Peel"                       # display + .app + executable
-slug        = "peel"                       # url/filename segment
-bundle_id   = "me.douglaslassance.peel"
+name        = "MyApp"                       # display + .app + executable
+slug        = "myapp"                       # url/filename segment
+bundle_id   = "com.example.myapp"
 team_id     = "556XHQJK3G"
 developer   = "Douglas Lassance"           # signing identity name
-homepage    = "https://peel.douglaslassance.me/"
+homepage    = "https://example.com/myapp"
 description = "Browse different"
 category    = "public.app-category.productivity"
 min_macos   = "13.0"
@@ -106,21 +106,21 @@ swift_target  = "App"                      # SPM target name (swift only)
 
 # Optional sections — presence enables the channel
 [sparkle]
-feed_url = "https://storage.douglaslassance.me/peel/peel.xml"
+feed_url = "https://example.com/myapp/myapp.xml"
 
 [s3]
-bucket_prefix         = "peel"
-appcast_filename      = "peel.xml"
-download_url_template = "https://api.douglaslassance.me/peel/download/{version}/{target}"
+bucket_prefix         = "myapp"
+appcast_filename      = "myapp.xml"
+download_url_template = "https://example.com/myapp/download/{version}/{target}"
 
 [homebrew]
-cask_name = "peel"
+cask_name = "myapp"
 
 [appstore]
 non_exempt_encryption = false
 
 [plist.usage_descriptions]
-NSDocumentsFolderUsageDescription = "Peel needs access to browse and display your tagged files."
+NSDocumentsFolderUsageDescription = "MyApp needs access to your Documents folder."
 ```
 
 See [catapult.toml.example](catapult.toml.example) for the

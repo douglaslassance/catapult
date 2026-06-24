@@ -136,7 +136,7 @@ full annotated schema, including optional overrides.
 | s3      | `S3_PUBLIC_URL`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ZONE_ID`, `CLOUDFLARE_KV_NAMESPACE_ID` | optional: Cloudflare cache purge + KV |
 | sparkle | `SPARKLE_PUBLIC_KEY`, `SPARKLE_PRIVATE_KEY` | EdDSA key pair (private base64) |
 | homebrew | `HOMEBREW_TAP_URL` | tap repo URL (defaults to Homebrew/homebrew-cask) |
-| homebrew | `HOMEBREW_TAP_TOKEN` (CI) → `GITHUB_PERSONAL_ACCESS_TOKEN` (script) | GH token for tap push |
+| homebrew | `HOMEBREW_TAP_ACCESS_TOKEN` | GH personal access token for tap push |
 | appstore (CI) | `APPSTORE_CERT`, `APPSTORE_CERT_PASSWORD` | Apple Distribution cert (base64 .p12) |
 | appstore (CI) | `INSTALLER_CERT`, `INSTALLER_CERT_PASSWORD` | Mac Installer Distribution cert |
 | appstore (CI) | `PROVISIONING_PROFILE_B64` | base64 .provisionprofile |

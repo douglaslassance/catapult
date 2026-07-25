@@ -31,22 +31,38 @@ fi
 # Load TOML into env
 eval "$(python3 "${CATAPULT_DIR}/parse_config.py" "$CATAPULT_CONFIG")"
 
-# Required for any kind
+# Required for any kind/platform
 : "${CATAPULT_APP_NAME:?app.name required in catapult.toml}"
 : "${CATAPULT_APP_SLUG:?app.slug required in catapult.toml}"
 : "${CATAPULT_APP_BUNDLE_ID:?app.bundle_id required in catapult.toml}"
 : "${CATAPULT_APP_TEAM_ID:?app.team_id required in catapult.toml}"
 : "${CATAPULT_APP_DEVELOPER:?app.developer required in catapult.toml}"
-: "${CATAPULT_APP_MIN_MACOS:?app.min_macos required in catapult.toml}"
-: "${CATAPULT_BUILD_ARCH:?build.arch required in catapult.toml}"
-: "${CATAPULT_BUILD_TARGET_TRIPLE:?build.target_triple required in catapult.toml}"
 
-# Build kind: "swift" (default) or "tauri"
+# Build kind: "swift" (default), "tauri", or "xcodeproj"
 CATAPULT_BUILD_KIND="${CATAPULT_BUILD_KIND:-swift}"
 case "$CATAPULT_BUILD_KIND" in
-    swift|tauri) ;;
-    *) echo "❌ catapult: build.kind must be 'swift' or 'tauri' (got '$CATAPULT_BUILD_KIND')" >&2; exit 1 ;;
+    swift|tauri|xcodeproj) ;;
+    *) echo "❌ catapult: build.kind must be 'swift', 'tauri', or 'xcodeproj' (got '$CATAPULT_BUILD_KIND')" >&2; exit 1 ;;
 esac
+
+# Platform: "macos" (default) or "ios". iOS builds go through Xcode, so they
+# require kind = "xcodeproj" and ship only via the appstore channel.
+CATAPULT_BUILD_PLATFORM="${CATAPULT_BUILD_PLATFORM:-macos}"
+case "$CATAPULT_BUILD_PLATFORM" in
+    macos|ios) ;;
+    *) echo "❌ catapult: build.platform must be 'macos' or 'ios' (got '$CATAPULT_BUILD_PLATFORM')" >&2; exit 1 ;;
+esac
+if [ "$CATAPULT_BUILD_PLATFORM" = "ios" ] && [ "$CATAPULT_BUILD_KIND" != "xcodeproj" ]; then
+    echo "❌ catapult: build.platform = 'ios' requires build.kind = 'xcodeproj'" >&2; exit 1
+fi
+
+# macOS SPM/Tauri required fields. The Xcode project supplies these itself for
+# xcodeproj builds, so they're only required for the hand-assembled kinds.
+if [ "$CATAPULT_BUILD_KIND" = "swift" ] || [ "$CATAPULT_BUILD_KIND" = "tauri" ]; then
+    : "${CATAPULT_APP_MIN_MACOS:?app.min_macos required in catapult.toml}"
+    : "${CATAPULT_BUILD_ARCH:?build.arch required in catapult.toml}"
+    : "${CATAPULT_BUILD_TARGET_TRIPLE:?build.target_triple required in catapult.toml}"
+fi
 
 # Swift-only required fields
 if [ "$CATAPULT_BUILD_KIND" = "swift" ]; then
@@ -62,6 +78,15 @@ if [ "$CATAPULT_BUILD_KIND" = "tauri" ]; then
         npm|pnpm|bun|yarn) ;;
         *) echo "❌ catapult: build.package_manager must be npm/pnpm/bun/yarn" >&2; exit 1 ;;
     esac
+fi
+
+# xcodeproj fields (iOS today). Drives `xcodebuild archive` / `-exportArchive`.
+if [ "$CATAPULT_BUILD_KIND" = "xcodeproj" ]; then
+    : "${CATAPULT_BUILD_SCHEME:?build.scheme required for xcodeproj builds}"
+    if [ -z "${CATAPULT_BUILD_PROJECT:-}" ] && [ -z "${CATAPULT_BUILD_WORKSPACE:-}" ]; then
+        echo "❌ catapult: build.project or build.workspace required for xcodeproj builds" >&2; exit 1
+    fi
+    CATAPULT_BUILD_CONFIGURATION="${CATAPULT_BUILD_CONFIGURATION:-Release}"
 fi
 
 # Defaults
@@ -98,6 +123,7 @@ esac
 export CATAPULT_BUILD_PROVISIONING_PROFILE
 
 export CATAPULT_BUILD_KIND CATAPULT_BUILD_EXECUTABLE
+export CATAPULT_BUILD_PLATFORM CATAPULT_BUILD_CONFIGURATION
 export CATAPULT_BUILD_ICON CATAPULT_BUILD_ASSETS
 export CATAPULT_BUILD_ICON_COMMAND
 export CATAPULT_BUILD_ENTITLEMENTS_DIRECT CATAPULT_BUILD_ENTITLEMENTS_APPSTORE

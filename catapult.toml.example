@@ -31,6 +31,25 @@ swift_target  = "App"                      # SPM target name; resource bundle is
 # tauri_dir           = "src-tauri"        # default
 # frontend_build      = "bun run build"    # default = "${package_manager} run build"
 
+# --- iOS apps ---------------------------------------------------------------
+# iOS is Xcode-driven: xcodebuild archives and exports the .ipa, so most macOS
+# fields above (arch, target_triple, min_macos, swift_target, entitlements,
+# icon) do NOT apply — the Xcode project owns all of that. Set:
+#
+# [build]
+# kind        = "xcodeproj"
+# platform    = "ios"
+# scheme      = "MyApp"                     # xcodebuild -scheme
+# project     = "MyApp.xcodeproj"           # OR workspace = "MyApp.xcworkspace"
+# configuration = "Release"                 # default
+# pregenerate = "xcodegen generate"         # optional hook run before archiving
+#                                           # (use when the .xcodeproj is generated + gitignored)
+#
+# iOS apps ship only through the [appstore] channel; s3/homebrew/sparkle/dmg
+# are macOS-only and are ignored. Uploading to App Store Connect is what makes
+# a build available in TestFlight. ITSAppUsesNonExemptEncryption must be set in
+# the app's own Info.plist (Xcode owns the plist for iOS).
+
 # --- Optional channels --- presence of each section enables that channel.
 
 [sparkle]                                  # embed Sparkle in direct build + sign DMG

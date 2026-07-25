@@ -1,16 +1,36 @@
 # catapult
 
-Shared release pipeline for Swift macOS apps. Builds, signs, notarizes, and
-publishes a .app to:
+Shared release pipeline for Swift apps. Builds, signs, notarizes, and
+publishes to:
 
 - a notarized **DMG** on S3-compatible storage (e.g. Cloudflare R2), with optional Sparkle appcast
 - a **Homebrew** cask (PR against any tap)
 - the **Mac App Store** (.pkg via App Store Connect)
+- **iOS TestFlight / App Store** (.ipa via App Store Connect)
 
-Supports both **Swift Package Manager** apps and **Tauri** apps (sharing the
-notarize / upload / Homebrew steps; only the build step differs).
+Supports **Swift Package Manager** and **Tauri** macOS apps (sharing the
+notarize / upload / Homebrew steps; only the build step differs), plus **iOS
+Xcode-project** apps (archived and exported by `xcodebuild`, uploaded to App
+Store Connect — which is what puts a build on TestFlight).
 
 Each app picks which channels it ships through via its `catapult.toml`.
+
+### iOS apps in brief
+
+iOS support is `kind = "xcodeproj"` + `platform = "ios"` in `catapult.toml`.
+It only uses the `appstore` channel (DMG / Homebrew / Sparkle are macOS-only).
+`release.sh` archives with `xcodebuild`, exports an App Store `.ipa`, and
+uploads it with the same App Store Connect API key the macOS path uses
+(`NOTARIZATION_KEY` / `_KEY_ID` / `_ISSUER_ID`). Locally:
+
+```sh
+./catapult/release.sh                    # defaults to --channels appstore for iOS
+./catapult/release.sh 1.2.3              # explicit marketing version
+```
+
+See the iOS block in [catapult.toml.example](catapult.toml.example) for the
+config fields. The build number is derived automatically from the commit count,
+so every upload is unique and increasing.
 
 ## Consuming catapult from an app
 

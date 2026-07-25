@@ -23,6 +23,11 @@ on:
         required: false
         type: string
         default: "s3,homebrew"
+      platform:
+        description: "Target platform: macos (default) or ios"
+        required: false
+        type: string
+        default: "macos"
       runner:
         required: false
         type: string
@@ -131,8 +136,8 @@ jobs:
         run: ./catapult/release.sh "${{ steps.ver.outputs.version }}" --channels homebrew
 
   appstore:
-    if: contains(inputs.channels, 'appstore')
-    name: Build + upload (App Store)
+    if: contains(inputs.channels, 'appstore') && inputs.platform != 'ios'
+    name: Build + upload (Mac App Store)
     runs-on: ${{ inputs.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -185,6 +190,41 @@ jobs:
           echo "$PROVISIONING_PROFILE_B64" | base64 --decode > "$PP_DIR/$PROFILE_NAME"
 
       - name: Build + upload App Store
+        env:
+          NOTARIZATION_KEY: ${{ secrets.NOTARIZATION_KEY }}
+          NOTARIZATION_KEY_ID: ${{ secrets.NOTARIZATION_KEY_ID }}
+          NOTARIZATION_ISSUER_ID: ${{ secrets.NOTARIZATION_ISSUER_ID }}
+        run: ./catapult/release.sh "${{ steps.ver.outputs.version }}" --channels appstore
+
+  appstore-ios:
+    if: contains(inputs.channels, 'appstore') && inputs.platform == 'ios'
+    name: Build + upload (iOS App Store / TestFlight)
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Resolve version
+        id: ver
+        run: |
+          V="${{ inputs.version }}"
+          if [ -z "$V" ]; then
+            if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+              V="${GITHUB_REF#refs/tags/}"
+            else
+              V="$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.0)"
+            fi
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+      # No certificate import: build_ios.sh archives with -allowProvisioningUpdates
+      # and the App Store Connect API key, so Xcode manages the distribution cert
+      # and provisioning profile itself.
+      - name: Build + upload iOS App Store
         env:
           NOTARIZATION_KEY: ${{ secrets.NOTARIZATION_KEY }}
           NOTARIZATION_KEY_ID: ${{ secrets.NOTARIZATION_KEY_ID }}

@@ -5,9 +5,13 @@
 # build_appstore → verify_appstore → upload_appstore). Used both locally and
 # inside the catapult CD workflow so the two paths stay identical.
 #
-# Usage:   release.sh [version] [--channels s3,homebrew,appstore]
+# Usage:   release.sh [version] [--channels s3,homebrew,appstore] [--no-testflight]
 # Version: defaults to latest git tag, or 0.0.0.
 # Channels: defaults to "s3,homebrew" (App Store opt-in).
+#
+# --no-testflight uploads the iOS build but stops short of distributing it, for
+# when you want the build parked in App Store Connect rather than in front of
+# testers. Only meaningful with a [testflight] section in catapult.toml.
 #
 # Assumes signing certificates and the provisioning profile (if shipping to
 # App Store) are already importable from the user's Keychain. The catapult
@@ -24,11 +28,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 VERSION=""
 CHANNELS=""
+TESTFLIGHT=1
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --channels) CHANNELS="$2"; shift 2 ;;
         --channels=*) CHANNELS="${1#*=}"; shift ;;
+        --no-testflight) TESTFLIGHT=0; shift ;;
         *) VERSION="$1"; shift ;;
     esac
 done
@@ -63,6 +69,13 @@ if [ "$CATAPULT_BUILD_PLATFORM" = "ios" ]; then
     if has_channel appstore; then
         "${SCRIPT_DIR}/build_ios.sh" "$VERSION"
         "${SCRIPT_DIR}/upload_ios.sh" "$VERSION"
+        # Uploading only parks the build. Distributing it needs What to Test,
+        # the beta groups, and (for external groups) Beta App Review.
+        if [ "$TESTFLIGHT" = "1" ]; then
+            "${SCRIPT_DIR}/testflight_ios.sh" "$VERSION"
+        else
+            echo "ℹ️  --no-testflight: build uploaded but not distributed."
+        fi
     fi
     echo ""
     echo "✅ Release v${VERSION} complete"

@@ -29,8 +29,32 @@ uploads it with the same App Store Connect API key the macOS path uses
 ```
 
 See the iOS block in [catapult.toml.example](catapult.toml.example) for the
-config fields. The build number is derived automatically from the commit count,
-so every upload is unique and increasing.
+config fields. The build number is derived automatically from the latest
+commit's Unix timestamp (`git log -1 --format=%ct`), so every upload is unique
+and increasing. A timestamp rather than a commit count because a count can go
+backwards after a rebase, a squash, or in a shallow clone, and App Store
+Connect rejects a build number that is not greater than the last one.
+
+Uploading only parks a build in App Store Connect. Add a `[testflight]` section
+and `release.sh` also distributes it:
+
+```toml
+[testflight]
+groups = ["Friends"]
+submit_for_review = true
+```
+
+`testflight_ios.sh` then waits for processing, writes "What to Test" from the
+commit subjects since the previous tag, attaches the groups, and submits the
+build for Beta App Review when any group is external. Pass `--no-testflight` to
+upload without distributing, and re-run `./catapult/testflight_ios.sh` on its
+own if processing outruns the timeout — every step is idempotent.
+
+Two caveats. Beta App Review is only waived for later builds inside a version
+train that already passed review, and catapult mints a new marketing version per
+release, so essentially every release goes through review. And the App Store
+Connect key needs **App Manager** or Admin to submit for review, where uploading
+alone only needs Developer.
 
 ## Consuming catapult from an app
 

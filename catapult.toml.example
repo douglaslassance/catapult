@@ -49,6 +49,9 @@ swift_target  = "App"                      # SPM target name; resource bundle is
 # are macOS-only and are ignored. Uploading to App Store Connect is what makes
 # a build available in TestFlight. ITSAppUsesNonExemptEncryption must be set in
 # the app's own Info.plist (Xcode owns the plist for iOS).
+#
+# Add [testflight] to also distribute each build, not just upload it (see the
+# section at the bottom of this file).
 
 # --- Optional channels --- presence of each section enables that channel.
 
@@ -73,6 +76,23 @@ cask_name = "myapp"
 
 [appstore]                                 # build .pkg + upload to App Store Connect
 non_exempt_encryption = false
+
+# [testflight]                             # iOS only — distribute after uploading
+# groups = ["Friends"]                     # beta group names, exactly as in ASC
+# submit_for_review = true                 # default; external groups require it
+# timeout = 1200                           # seconds to wait for processing
+#
+# Without this section catapult uploads the build and stops, leaving you to set
+# "What to Test" and assign groups by hand in App Store Connect. With it,
+# release.sh waits for processing, writes What to Test from the commit subjects
+# since the previous tag, attaches the groups, and submits for Beta App Review.
+#
+# Beta App Review is only skipped for later builds within a version train that
+# was already reviewed. catapult mints a new marketing version per release, so
+# in practice every release needs the submission.
+#
+# The App Store Connect API key needs App Manager (or Admin) to submit for beta
+# review; an upload-only Developer key gets a 403 on that step.
 
 # Two modes for the Info.plist:
 #

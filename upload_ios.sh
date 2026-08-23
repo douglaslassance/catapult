@@ -55,4 +55,5 @@ xcrun altool --upload-app \
 
 echo ""
 echo "✅ Uploaded. It appears in TestFlight after processing (usually 5–15 min)."
-echo "   Assign testers at https://appstoreconnect.apple.com."
+echo "   Distributing it to testers is testflight_ios.sh's job (or do it by hand"
+echo "   at https://appstoreconnect.apple.com)."

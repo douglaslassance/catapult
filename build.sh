@@ -66,6 +66,10 @@ install_name_tool -add_rpath "@executable_path/../Frameworks" \
     "${APP_PATH}/Contents/MacOS/${APP_NAME}"
 
 cp "${BUILD_DIR}/AppIcon.icns" "${APP_PATH}/Contents/Resources/"
+# macOS 26 adaptive icon (light / dark / tinted), keyed by CFBundleIconName in
+# the Info.plist. Optional: apps without an Icon Composer document ship only
+# the flat .icns above, and older macOS ignores the catalog either way.
+[ -f "${BUILD_DIR}/Assets.car" ] && cp "${BUILD_DIR}/Assets.car" "${APP_PATH}/Contents/Resources/"
 [ -f LICENSE ] && cp LICENSE "${APP_PATH}/Contents/Resources/"
 
 # SPM resource bundle (Bundle.module support)

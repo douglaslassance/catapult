@@ -83,7 +83,13 @@ if [ -n "${CATAPULT_HAS_SPARKLE:-}" ]; then
             echo "⚠️  Sparkle signature not found (${EDSIG_FILE}) — run build.sh first, skipping appcast"
             echo ""
         else
-            ED_SIG=$(cat "$EDSIG_FILE")
+            # Signatures written before this was normalised at build time
+            # hold the whole attribute pair, so both shapes are read here.
+            ED_SIG=$(catapult_ed_signature "$(cat "$EDSIG_FILE")")
+            if [ -z "$ED_SIG" ]; then
+                echo "❌ ${EDSIG_FILE} holds no readable signature"
+                exit 1
+            fi
             DMG_SIZE=$(stat -f%z "${DIST_DIR}/${DMG_FILE}")
             PUB_DATE=$(date -R)
             DOWNLOAD_URL="${DOWNLOAD_URL_TEMPLATE//\{version\}/$VERSION}"

@@ -128,3 +128,23 @@ export CATAPULT_BUILD_ICON CATAPULT_BUILD_ASSETS
 export CATAPULT_BUILD_ICON_COMMAND
 export CATAPULT_BUILD_ENTITLEMENTS_DIRECT CATAPULT_BUILD_ENTITLEMENTS_APPSTORE
 export CATAPULT_BUILD_PACKAGE_MANAGER CATAPULT_BUILD_TAURI_DIR CATAPULT_BUILD_FRONTEND_BUILD
+
+# Sparkle's `sign_update` prints a whole attribute pair rather than the
+# signature on its own:
+#
+#     sparkle:edSignature="…" length="…"
+#
+# Only the signature belongs inside the appcast's attribute. Pasting the line
+# whole is what published a feed whose enclosure carried a nested
+# `sparkle:edSignature=` and a second `length`, which no Sparkle client can
+# verify and no XML parser should accept. Takes either shape and returns the
+# signature.
+catapult_ed_signature() {
+    local raw="$1"
+    if [[ "$raw" == *edSignature=* ]]; then
+        printf '%s' "$raw" | sed -n 's/.*edSignature="\([^"]*\)".*/\1/p'
+    else
+        printf '%s' "$raw"
+    fi
+}
+

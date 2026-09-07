@@ -274,6 +274,14 @@ if [ -n "${CATAPULT_HAS_SPARKLE:-}" ]; then
             echo "❌ Failed to sign DMG for Sparkle"
             exit 1
         fi
+
+        # Stored as the signature alone, so whoever reads it next does not have
+        # to know what shape the tool printed.
+        ED_SIG=$(catapult_ed_signature "$ED_SIG")
+        if [ -z "$ED_SIG" ]; then
+            echo "❌ Could not read the signature out of sign_update's output"
+            exit 1
+        fi
         echo "$ED_SIG" > "${DIST_DIR}/${DMG_NAME}.edsig"
         echo "✅ Sparkle signature saved"
     fi

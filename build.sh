@@ -66,6 +66,11 @@ install_name_tool -add_rpath "@executable_path/../Frameworks" \
     "${APP_PATH}/Contents/MacOS/${APP_NAME}"
 
 cp "${BUILD_DIR}/AppIcon.icns" "${APP_PATH}/Contents/Resources/"
+# The compiled asset catalogue, where an adaptive icon keeps its light, dark
+# and tinted appearances. `CFBundleIconName` names an entry inside it, so
+# without the catalogue macOS falls back to the static .icns and the icon never
+# follows the system appearance. Absent for apps whose icon is only an .icns.
+[ -f "${BUILD_DIR}/Assets.car" ] && cp "${BUILD_DIR}/Assets.car" "${APP_PATH}/Contents/Resources/"
 [ -f LICENSE ] && cp LICENSE "${APP_PATH}/Contents/Resources/"
 
 # SPM resource bundle (Bundle.module support)

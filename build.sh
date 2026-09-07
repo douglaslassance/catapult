@@ -67,9 +67,8 @@ install_name_tool -add_rpath "@executable_path/../Frameworks" \
 
 cp "${BUILD_DIR}/AppIcon.icns" "${APP_PATH}/Contents/Resources/"
 # The compiled asset catalogue, where an adaptive icon keeps its light, dark
-# and tinted appearances. `CFBundleIconName` names an entry inside it, so
-# without the catalogue macOS falls back to the static .icns and the icon never
-# follows the system appearance. Absent for apps whose icon is only an .icns.
+# and tinted appearances. Absent for apps whose icon is only an .icns; the
+# check after the Info.plist is written is what says whether it was needed.
 [ -f "${BUILD_DIR}/Assets.car" ] && cp "${BUILD_DIR}/Assets.car" "${APP_PATH}/Contents/Resources/"
 [ -f LICENSE ] && cp LICENSE "${APP_PATH}/Contents/Resources/"
 
@@ -100,6 +99,21 @@ fi
 python3 "${SCRIPT_DIR}/render_plist.py" "$CATAPULT_CONFIG" \
     --kind direct --version "$VERSION" \
     --out "${APP_PATH}/Contents/Info.plist"
+
+# `CFBundleIconName` names an entry inside a compiled asset catalogue rather
+# than a file. Declared without one in the bundle, macOS finds nothing, falls
+# back to `CFBundleIconFile`, and the app ships with a static icon that never
+# follows light and dark. That failed silently for months here: the plist said
+# one thing, the bundle held another, and nothing on the way out disagreed.
+ICON_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIconName" \
+    "${APP_PATH}/Contents/Info.plist" 2>/dev/null || true)
+if [ -n "$ICON_NAME" ] && [ ! -f "${APP_PATH}/Contents/Resources/Assets.car" ]; then
+    echo "❌ Info.plist declares CFBundleIconName=${ICON_NAME}, but the bundle" >&2
+    echo "   has no Contents/Resources/Assets.car to find it in." >&2
+    echo "   Build the asset catalogue to ${BUILD_DIR}/Assets.car, or drop" >&2
+    echo "   CFBundleIconName from [plist.extras] if the icon is only an .icns." >&2
+    exit 1
+fi
 
 echo "APPL????" > "${APP_PATH}/Contents/PkgInfo"
 

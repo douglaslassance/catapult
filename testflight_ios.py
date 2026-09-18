@@ -40,16 +40,10 @@ except ImportError:
     sys.exit(1)
 
 API = "https://api.appstoreconnect.apple.com"
-# App Store Connect caps "What to Test" at 4000 characters.
 WHATS_NEW_MAX = 4000
-
 
 class ASCError(RuntimeError):
     pass
-
-
-# --- auth ---------------------------------------------------------------
-
 
 def load_private_key() -> str:
     """Return the .p8 PEM, from the env var (raw or base64) or the key dir."""
@@ -73,10 +67,8 @@ def load_private_key() -> str:
         f".p8) or place it at {path}"
     )
 
-
 def b64url(data: bytes) -> bytes:
     return base64.urlsafe_b64encode(data).rstrip(b"=")
-
 
 def der_to_raw(der: bytes) -> bytes:
     """Convert an ECDSA DER SEQUENCE{INTEGER r, INTEGER s} to raw r||s."""
@@ -92,13 +84,11 @@ def der_to_raw(der: bytes) -> bytes:
         length = der[i + 1]
         value = der[i + 2 : i + 2 + length]
         i += 2 + length
-        # DER integers are signed, so a leading zero byte may pad a high bit.
         value = value.lstrip(b"\x00")
         if len(value) > 32:
             raise ASCError("ECDSA signature component longer than P-256 allows")
         out += value.rjust(32, b"\x00")
     return out
-
 
 def make_token() -> str:
     key_id = os.environ.get("NOTARIZATION_KEY_ID")
@@ -134,10 +124,6 @@ def make_token() -> str:
 
     return (signing_input + b"." + b64url(sig)).decode()
 
-
-# --- transport ----------------------------------------------------------
-
-
 class Client:
     def __init__(self, dry_run: bool = False):
         self._token = None
@@ -146,7 +132,6 @@ class Client:
 
     @property
     def token(self) -> str:
-        # Tokens last 15 minutes and polling can outlive that, so re-mint.
         if not self._token or time.time() - self._minted_at > 600:
             self._token = make_token()
             self._minted_at = time.time()
@@ -188,17 +173,12 @@ class Client:
     def patch(self, path, body):
         return self.request("PATCH", path, body)
 
-
-# --- steps --------------------------------------------------------------
-
-
 def find_app(client: Client, bundle_id: str) -> dict:
     res = client.get("/v1/apps", **{"filter[bundleId]": bundle_id, "limit": "2"})
     apps = res.get("data", [])
     if not apps:
         raise ASCError(f"No App Store Connect app with bundle id {bundle_id}")
     return apps[0]
-
 
 def wait_for_build(
     client: Client, app_id: str, version: str, build_number: str, timeout: int
@@ -245,7 +225,6 @@ def wait_for_build(
             )
         time.sleep(30)
 
-
 def set_whats_new(
     client: Client, build_id: str, locale: str, notes: str, force: bool = False
 ) -> None:
@@ -264,8 +243,6 @@ def set_whats_new(
         if current == notes:
             print("✅ What to Test already up to date")
             return
-        # A re-run must not clobber notes someone wrote by hand in App Store
-        # Connect. Fresh builds have none, so this only bites on re-runs.
         if current and not force:
             print(
                 "ℹ️  What to Test already written; keeping it. "
@@ -297,7 +274,6 @@ def set_whats_new(
         )
     print(f"✅ Set What to Test ({locale})")
 
-
 def resolve_groups(client: Client, app_id: str, names: list) -> list:
     res = client.get(
         "/v1/betaGroups",
@@ -317,10 +293,7 @@ def resolve_groups(client: Client, app_id: str, names: list) -> list:
         )
     return [by_name[n] for n in names]
 
-
 def attach_groups(client: Client, build_id: str, groups: list) -> None:
-    # The build's betaGroups relationship only allows CREATE/DELETE, so read the
-    # current assignment from the other side with filter[builds].
     current = {
         g["id"]
         for g in client.get(
@@ -337,7 +310,6 @@ def attach_groups(client: Client, build_id: str, groups: list) -> None:
         {"data": [{"type": "betaGroups", "id": g["id"]} for g in todo]},
     )
     print(f"✅ Attached group(s): {', '.join(g['attributes']['name'] for g in todo)}")
-
 
 def submit_for_review(client: Client, build_id: str) -> str:
     existing = client.get(f"/v1/builds/{build_id}/betaAppReviewSubmission").get("data")
@@ -360,10 +332,6 @@ def submit_for_review(client: Client, build_id: str) -> str:
     print(f"✅ Submitted for Beta App Review (state: {state})")
     return state
 
-
-# --- main ---------------------------------------------------------------
-
-
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--config", default="catapult.toml")
@@ -383,7 +351,6 @@ def main() -> int:
     )
     args = p.parse_args()
 
-    # Keep progress output interleaved correctly with anything on stderr.
     sys.stdout.reconfigure(line_buffering=True)
 
     with open(args.config, "rb") as f:
@@ -391,7 +358,6 @@ def main() -> int:
 
     bundle_id = cfg["app"]["bundle_id"]
     tf = cfg.get("testflight", {})
-    # Read groups straight from the TOML rather than from the CATAPULT_* env:
     # parse_config.py space-joins lists, which would split "Close Friends".
     group_names = tf.get("groups", [])
     if isinstance(group_names, str):
@@ -431,9 +397,7 @@ def main() -> int:
     groups = resolve_groups(client, app_id, group_names)
     external = [g for g in groups if not g["attributes"]["isInternalGroup"]]
 
-    # Apple wants What to Test before review, and the group attached before it
-    # can distribute on approval. If attaching is refused because the build
-    # isn't approved yet, submit first and then retry.
+    # Apple wants What to Test before review, and the group attached before approval.
     try:
         attach_groups(client, build_id, groups)
         attached = True
@@ -461,7 +425,6 @@ def main() -> int:
             "(usually within a day)."
         )
     return 0
-
 
 if __name__ == "__main__":
     try:

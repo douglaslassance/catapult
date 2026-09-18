@@ -22,7 +22,6 @@ except ImportError:
     sys.stderr.write("catapult: need Python 3.11+\n")
     sys.exit(1)
 
-
 def xml_escape(s: str) -> str:
     return (
         s.replace("&", "&amp;")
@@ -30,7 +29,6 @@ def xml_escape(s: str) -> str:
         .replace(">", "&gt;")
         .replace('"', "&quot;")
     )
-
 
 def render_resource(cfg: dict, version: str) -> str:
     app = cfg["app"]
@@ -51,7 +49,6 @@ def render_resource(cfg: dict, version: str) -> str:
 </dict>
 </plist>
 """
-
 
 def render_generated(cfg: dict, kind: str, version: str, build_number: str) -> str:
     app = cfg["app"]
@@ -130,7 +127,6 @@ def render_generated(cfg: dict, kind: str, version: str, build_number: str) -> s
     lines += ["</dict>", "</plist>", ""]
     return "\n".join(lines)
 
-
 def render_passthrough(cfg: dict, kind: str, version: str, build_number: str,
                        template_path: str, app_root: str) -> str:
     """Read template plist, inject dynamic keys, write back as XML.
@@ -146,7 +142,6 @@ def render_passthrough(cfg: dict, kind: str, version: str, build_number: str,
     plist["CFBundleShortVersionString"] = version
     plist["CFBundleVersion"] = build_number
 
-    # Strip Sparkle keys when building for App Store (they're a rejection trigger).
     if kind == "appstore":
         for k in list(plist.keys()):
             if k.startswith("SU") and k[2:3].isupper():
@@ -164,7 +159,6 @@ def render_passthrough(cfg: dict, kind: str, version: str, build_number: str,
         plist["SUPublicEDKey"] = public_key
 
     return plistlib.dumps(plist).decode("utf-8")
-
 
 def main():
     p = argparse.ArgumentParser()
@@ -196,7 +190,6 @@ def main():
             f.write(content)
     else:
         sys.stdout.write(content)
-
 
 if __name__ == "__main__":
     main()

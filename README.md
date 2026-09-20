@@ -101,7 +101,7 @@ Individual scripts are also available if you need to run just one step:
 ./catapult/build.sh                # direct distribution (DMG)
 ./catapult/build_appstore.sh       # App Store .pkg
 ./catapult/verify_appstore.sh      # post-build sanity checks
-./catapult/upload.sh               # push DMG/appcast/KV to S3
+./catapult/upload.sh               # push DMG/appcast to S3, record the release
 ./catapult/upload_appstore.sh      # upload .pkg to App Store Connect
 ./catapult/push_homebrew.sh        # update tap, optionally --pull-request
 ```
@@ -194,7 +194,7 @@ full annotated schema, including optional overrides.
 | s3      | `APPLE_SIGNING_IDENTITY` | "Developer ID Application: ..." string |
 | s3      | `NOTARIZATION_KEY`, `NOTARIZATION_KEY_ID`, `NOTARIZATION_ISSUER_ID` | notarytool API key (base64 .p8) |
 | s3      | `S3_ACCOUNT_ID`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET_NAME` | S3-compatible bucket credentials |
-| s3      | `S3_PUBLIC_URL`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ZONE_ID`, `CLOUDFLARE_KV_NAMESPACE_ID` | optional: Cloudflare cache purge + KV |
+| s3      | `S3_PUBLIC_URL`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ZONE_ID`, `RELEASE_API_URL`, `RELEASE_API_TOKEN` | optional: Cloudflare cache purge, release record |
 | sparkle | `SPARKLE_PUBLIC_KEY`, `SPARKLE_PRIVATE_KEY` | EdDSA key pair (private base64) |
 | homebrew | `HOMEBREW_TAP_URL` | tap repo URL (defaults to Homebrew/homebrew-cask) |
 | homebrew | `HOMEBREW_TAP_ACCESS_TOKEN` | GH personal access token for tap push |

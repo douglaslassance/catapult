@@ -1,5 +1,5 @@
 #!/bin/bash
-# upload.sh — Upload DMG (+ Sparkle appcast + KV metadata) to S3-compatible storage.
+# upload.sh - Upload DMG (+ Sparkle appcast) to S3-compatible storage, then record the release.
 # Requires [s3] section in catapult.toml.
 #
 # Usage: upload.sh [version]
@@ -235,53 +235,32 @@ PYEOF
     fi
 fi
 
-# KV metadata (drives Homebrew livecheck)
+# Release record (drives Homebrew livecheck)
 if [ "$IS_PRERELEASE" = "1" ]; then
-    echo "⚠️  Skipping KV update (pre-release: $VERSION)"
+    echo "⚠️  Skipping release record (pre-release: $VERSION)"
     echo ""
-elif [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${S3_ACCOUNT_ID:-}" ] || [ -z "${CLOUDFLARE_KV_NAMESPACE_ID:-}" ]; then
-    echo "⚠️  Skipping KV update (CLOUDFLARE_API_TOKEN, S3_ACCOUNT_ID, or CLOUDFLARE_KV_NAMESPACE_ID not set)"
+elif [ -z "${RELEASE_API_TOKEN:-}" ] || [ -z "${RELEASE_API_URL:-}" ]; then
+    echo "⚠️  Skipping release record (RELEASE_API_TOKEN or RELEASE_API_URL not set)"
     echo ""
 else
-    KV_KEY="${CATAPULT_S3_KV_KEY:-$SLUG}"
-    KV_URL="https://api.cloudflare.com/client/v4/accounts/${S3_ACCOUNT_ID}/storage/kv/namespaces/${CLOUDFLARE_KV_NAMESPACE_ID}/values/${KV_KEY}"
-
-    CURRENT_KV=$(curl -s -X GET "$KV_URL" -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" 2>/dev/null)
-    CURRENT_LATEST=$(echo "$CURRENT_KV" | grep -o '"latest":"[^"]*"' | cut -d'"' -f4)
-
-    HIGHER=$(printf '%s\n' "$CURRENT_LATEST" "$VERSION" | sort -V | tail -1)
-    if [ -z "$CURRENT_LATEST" ] || { [ "$HIGHER" = "$VERSION" ] && [ "$CURRENT_LATEST" != "$VERSION" ]; }; then
-        EXISTING_DOWNLOADS=$(echo "$CURRENT_KV" | python3 -c "
-import sys, json
-try:
-    d = json.load(sys.stdin)
-    print(json.dumps(d.get('downloads', {})))
-except Exception:
-    print('{}')
-")
-        NEW_VALUE=$(python3 -c "
+    # The API owns the version comparison, so re-running an older release cannot
+    # walk `latest` backwards no matter what this script is invoked with.
+    echo "☁️  Recording release..."
+    RELEASE_RESULT=$(curl -s -X PUT "${RELEASE_API_URL%/}/${SLUG}/release" \
+        -H "Authorization: Bearer ${RELEASE_API_TOKEN}" \
+        -H "Content-Type: application/json" \
+        --data "$(python3 -c "
 import json, sys
-data = {
-    'latest': '${VERSION}',
-    'downloads': json.loads(sys.argv[1]),
-    'extension': '.dmg',
-}
-print(json.dumps(data))
-" "$EXISTING_DOWNLOADS")
+print(json.dumps({'version': sys.argv[1], 'extension': '.dmg'}))
+" "$VERSION")")
 
-        echo "☁️  Updating KV metadata..."
-        KV_RESULT=$(curl -s -X PUT "$KV_URL" \
-            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-            -H "Content-Type: application/json" \
-            --data "$NEW_VALUE")
-        if echo "$KV_RESULT" | grep -q '"success":true'; then
-            echo "✅ KV updated ($CURRENT_LATEST → $VERSION)"
-        else
-            echo "❌ KV update failed: $KV_RESULT"
-            exit 1
-        fi
+    if echo "$RELEASE_RESULT" | grep -q '"updated":true'; then
+        echo "✅ Release recorded (latest is now $VERSION)"
+    elif echo "$RELEASE_RESULT" | grep -q '"updated":false'; then
+        echo "⚠️  Skipping release record ($VERSION is not newer than current)"
     else
-        echo "⚠️  Skipping KV update ($VERSION is not newer than current $CURRENT_LATEST)"
+        echo "❌ Release record failed: $RELEASE_RESULT"
+        exit 1
     fi
     echo ""
 fi

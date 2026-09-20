@@ -246,13 +246,11 @@ else
     # The API owns the version comparison, so re-running an older release cannot
     # walk `latest` backwards no matter what this script is invoked with.
     echo "☁️  Recording release..."
+    RELEASE_BODY=$(printf '{"version":"%s","extension":"%s"}' "$VERSION" ".dmg")
     RELEASE_RESULT=$(curl -s -X PUT "${RELEASE_API_URL%/}/${SLUG}/release" \
         -H "Authorization: Bearer ${RELEASE_API_TOKEN}" \
         -H "Content-Type: application/json" \
-        --data "$(python3 -c "
-import json, sys
-print(json.dumps({'version': sys.argv[1], 'extension': '.dmg'}))
-" "$VERSION")")
+        --data "$RELEASE_BODY")
 
     if echo "$RELEASE_RESULT" | grep -q '"updated":true'; then
         echo "✅ Release recorded (latest is now $VERSION)"

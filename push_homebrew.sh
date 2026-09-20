@@ -141,7 +141,14 @@ echo -e "${GREEN}✅ Tests passed${NC}"
 echo ""
 
 echo "🚀 Pushing to GitHub..."
-git push --force origin "$BRANCH"
+# git does not read GH_TOKEN, so without this the push falls through to whatever
+# the credential helper has cached, which is a 403 waiting to happen.
+if [ -n "${GH_TOKEN:-}" ]; then
+    PUSH_URL=$(git remote get-url origin | sed "s|https://|https://x-access-token:${GH_TOKEN}@|")
+    git push --force "$PUSH_URL" "$BRANCH"
+else
+    git push --force origin "$BRANCH"
+fi
 echo ""
 
 if [ "$PULL_REQUEST" = true ]; then

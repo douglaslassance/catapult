@@ -131,7 +131,9 @@ if ! git diff --quiet "$CASK_FILE"; then
 fi
 
 brew audit ${AUDIT_FLAGS:-} "$TAP_CASK"
-HOMEBREW_NO_INSTALL_FROM_API=1 brew install --cask "$TAP_CASK"
+# --force because the app is usually already installed on the machine cutting the
+# release, and without it brew refuses rather than verifying the new build.
+HOMEBREW_NO_INSTALL_FROM_API=1 brew install --cask --force "$TAP_CASK"
 
 cleanup
 trap - EXIT

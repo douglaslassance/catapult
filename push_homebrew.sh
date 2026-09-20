@@ -131,9 +131,10 @@ if ! git diff --quiet "$CASK_FILE"; then
 fi
 
 brew audit ${AUDIT_FLAGS:-} "$TAP_CASK"
-# --force because the app is usually already installed on the machine cutting the
-# release, and without it brew refuses rather than verifying the new build.
-HOMEBREW_NO_INSTALL_FROM_API=1 brew install --cask --force "$TAP_CASK"
+# fetch rather than install: this downloads the artifact and verifies its checksum,
+# which is what varies per release, without replacing the app on the machine cutting
+# it. What it gives up is proving the DMG mounts and holds the app the cask names.
+HOMEBREW_NO_INSTALL_FROM_API=1 brew fetch --cask "$TAP_CASK"
 
 cleanup
 trap - EXIT

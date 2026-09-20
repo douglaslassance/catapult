@@ -112,14 +112,21 @@ git commit -m "${BREW_NAME} ${VERSION}"
 echo ""
 
 TAP_CASK="${TAP_NAME}/${BREW_NAME}"
+# Testing points the tap at a temp clone, so put back whatever was there before,
+# including nothing. Without this a release leaves the machine untapped.
 cleanup() {
-    brew uninstall --cask "$TAP_CASK" 2>/dev/null || true
     brew untap --force "$TAP_NAME" 2>/dev/null || true
+    if [ -n "${PREVIOUS_TAP_URL:-}" ]; then
+        brew tap "$TAP_NAME" "$PREVIOUS_TAP_URL" 2>/dev/null || true
+    fi
 }
 trap cleanup EXIT
 
 echo "🧪 Testing cask..."
 rm -f ~/Library/Caches/Homebrew/downloads/*${APP_NAME}*
+# Remembered so cleanup can restore it; the tap is repointed at the temp clone so
+# audit and fetch test the cask about to be proposed, not the published one.
+PREVIOUS_TAP_URL=$(git -C "$(brew --repository "$TAP_NAME" 2>/dev/null)" remote get-url origin 2>/dev/null || echo "")
 brew untap --force "$TAP_NAME" 2>/dev/null || true
 brew tap "$TAP_NAME" "$(pwd)"
 

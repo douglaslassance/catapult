@@ -158,7 +158,7 @@ bundle_id   = "com.example.myapp"
 team_id     = "556XHQJK3G"
 developer   = "Douglas Lassance"           # signing identity name
 homepage    = "https://example.com/myapp"
-description = "Browse different"
+description = "Leverageable tagging"
 category    = "public.app-category.productivity"
 min_macos   = "13.0"
 

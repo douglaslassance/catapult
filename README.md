@@ -83,6 +83,8 @@ Add app-specific files at the app repo root:
 - `cask.rb` if shipping via Homebrew
   (see [cask.rb.example](cask.rb.example))
 - `.env` for local secrets (copy `catapult/env.example` to `.env`)
+- `Licenses/` for third-party notices that must ship with the binary, copied
+  into `Contents/Resources/Licenses`. Sparkle's is added there automatically.
 
 ### Local use
 

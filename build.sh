@@ -71,6 +71,7 @@ cp "${BUILD_DIR}/AppIcon.icns" "${APP_PATH}/Contents/Resources/"
 # check after the Info.plist is written is what says whether it was needed.
 [ -f "${BUILD_DIR}/Assets.car" ] && cp "${BUILD_DIR}/Assets.car" "${APP_PATH}/Contents/Resources/"
 [ -f LICENSE ] && cp LICENSE "${APP_PATH}/Contents/Resources/"
+[ -d Licenses ] && cp -R Licenses "${APP_PATH}/Contents/Resources/"
 
 # SPM resource bundle (Bundle.module support)
 BUNDLE_PATH="${APP_PATH}/Contents/Resources/${CATAPULT_APP_RESOURCE_BUNDLE_NAME}"
@@ -137,6 +138,16 @@ if [ -n "${CATAPULT_HAS_SPARKLE:-}" ]; then
         if [ -d "$XPC_SRC" ]; then
             mkdir -p "${APP_PATH}/Contents/XPCServices"
             cp -R "$XPC_SRC" "${APP_PATH}/Contents/XPCServices/"
+        fi
+
+        # MIT and bsdiff's BSD licence both require the notice in binary copies.
+        SPARKLE_LICENSE="$(dirname "$SPARKLE_XCFRAMEWORK")/LICENSE"
+        if [ -f "$SPARKLE_LICENSE" ]; then
+            mkdir -p "${APP_PATH}/Contents/Resources/Licenses"
+            cp "$SPARKLE_LICENSE" "${APP_PATH}/Contents/Resources/Licenses/Sparkle.txt"
+        else
+            echo "❌ Sparkle LICENSE not found next to $SPARKLE_XCFRAMEWORK"
+            exit 1
         fi
         echo "✅ Sparkle embedded"
     else

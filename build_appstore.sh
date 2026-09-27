@@ -81,6 +81,7 @@ chmod +x "${APP_PATH}/Contents/MacOS/${APP_NAME}"
 cp "${CATAPULT_BUILD_DIR}/AppIcon.icns" "${APP_PATH}/Contents/Resources/"
 [ -f LICENSE ] && cp LICENSE "${APP_PATH}/Contents/Resources/"
 [ -d Licenses ] && cp -R Licenses "${APP_PATH}/Contents/Resources/"
+[ -f PrivacyInfo.xcprivacy ] && cp PrivacyInfo.xcprivacy "${APP_PATH}/Contents/Resources/"
 
 HAS_BUNDLE=0
 if [ -d ".build/release/${CATAPULT_APP_RESOURCE_BUNDLE_NAME}" ]; then

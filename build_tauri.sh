@@ -58,11 +58,13 @@ echo ""
 
 # 2. Tauri build — runs cargo build --release + bundles the .app
 echo "📦 Running tauri build..."
+# Tauri stamps the bundle from tauri.conf.json, so the release version overrides it.
+VERSION_CONFIG="{\"version\":\"${VERSION}\"}"
 case "$CATAPULT_BUILD_PACKAGE_MANAGER" in
-    bun)  bun run tauri build ;;
-    pnpm) pnpm tauri build ;;
-    yarn) yarn tauri build ;;
-    npm)  npm run tauri build ;;
+    bun)  bun run tauri build --config "$VERSION_CONFIG" ;;
+    pnpm) pnpm tauri build --config "$VERSION_CONFIG" ;;
+    yarn) yarn tauri build --config "$VERSION_CONFIG" ;;
+    npm)  npm run tauri build -- --config "$VERSION_CONFIG" ;;
 esac
 echo ""
 

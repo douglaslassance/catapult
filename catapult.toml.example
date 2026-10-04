@@ -105,6 +105,13 @@ NSDocumentsFolderUsageDescription = "MyApp needs access to your Documents folder
 # [plist.extras]
 # LSUIElement = true
 #
+# Either mode can also take string keys from the environment, for values that
+# must not be committed. Each maps an Info.plist key to the variable holding it,
+# usually set in .env, and the build stops if the variable is missing.
+#
+# [plist.env]
+# MyAppAPIToken = "MYAPP_API_TOKEN"
+#
 # B) Passthrough — point at an existing Info.plist in the app repo. Trigger
 #    only injects CFBundleShortVersionString / CFBundleVersion / Sparkle keys
 #    / ITSAppUsesNonExemptEncryption and preserves everything else (document

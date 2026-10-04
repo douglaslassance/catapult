@@ -30,6 +30,18 @@ def xml_escape(s: str) -> str:
         .replace('"', "&quot;")
     )
 
+def env_values(cfg: dict) -> dict:
+    """Info.plist keys taken from the environment, so a value like an API key
+    reaches the built app without being committed. `[plist.env]` maps each key
+    to the variable that holds it, and a missing variable stops the build."""
+    values = {}
+    for key, var in (cfg.get("plist", {}).get("env", {}) or {}).items():
+        value = os.environ.get(var, "")
+        if not value:
+            sys.exit(f"error: {var} is required by [plist.env] in catapult.toml")
+        values[key] = value
+    return values
+
 def render_resource(cfg: dict, version: str) -> str:
     app = cfg["app"]
     return f"""<?xml version="1.0" encoding="UTF-8"?>
@@ -124,6 +136,12 @@ def render_generated(cfg: dict, kind: str, version: str, build_number: str) -> s
         else:
             lines.append(f"    <string>{xml_escape(str(v))}</string>")
 
+    for k, v in env_values(cfg).items():
+        lines += [
+            f"    <key>{xml_escape(k)}</key>",
+            f"    <string>{xml_escape(v)}</string>",
+        ]
+
     lines += ["</dict>", "</plist>", ""]
     return "\n".join(lines)
 
@@ -157,6 +175,8 @@ def render_passthrough(cfg: dict, kind: str, version: str, build_number: str,
             sys.exit("error: SPARKLE_PUBLIC_KEY is required when [sparkle] is set in catapult.toml")
         plist["SUFeedURL"] = cfg["sparkle"]["feed_url"]
         plist["SUPublicEDKey"] = public_key
+
+    plist.update(env_values(cfg))
 
     return plistlib.dumps(plist).decode("utf-8")
 

@@ -48,7 +48,6 @@ fi
 
 HOMEBREW_TAP_URL="${HOMEBREW_TAP_URL:-https://github.com/Homebrew/homebrew-cask.git}"
 HOMEBREW_REPO=$(echo "$HOMEBREW_TAP_URL" | sed 's|https://github.com/||' | sed 's|\.git$||')
-HOMEBREW_DIR=$(basename "$HOMEBREW_TAP_URL" .git)
 TAP_NAME=$(echo "$HOMEBREW_REPO" | sed 's|/homebrew-|/|')
 CASK_FILE="Casks/${BREW_NAME:0:1}/${BREW_NAME}.rb"
 
@@ -71,17 +70,22 @@ SHA256=$(awk '{print $1}' "${DIST_DIR}/${SHA_FILE}")
 echo -e "${BLUE}🍺 Updating Homebrew cask for ${APP_NAME} v${VERSION}${NC}"
 echo ""
 
-# Clone/update tap inside the catapult checkout, where .gitignore keeps it from
-# showing up as untracked content in the app repo's submodule.
+# Clone/update tap in .tap inside the catapult checkout, where .gitignore keeps
+# it from showing up as untracked content in the app repo's submodule.
 cd "$SCRIPT_DIR"
-if [ -d "$HOMEBREW_DIR" ]; then
-    cd "$HOMEBREW_DIR"
+if [ -d .tap ]; then
+    cd .tap
 else
-    git clone "$HOMEBREW_TAP_URL" "$HOMEBREW_DIR"
-    cd "$HOMEBREW_DIR"
+    git clone "$HOMEBREW_TAP_URL" .tap
+    cd .tap
 fi
 
-if ! git remote get-url upstream >/dev/null 2>&1; then
+# The folder name doesn't follow the URL, so point both remotes at it every run
+# or a changed HOMEBREW_TAP_URL would keep fetching from and pushing to the old tap.
+git remote set-url origin "$HOMEBREW_TAP_URL"
+if git remote get-url upstream >/dev/null 2>&1; then
+    git remote set-url upstream "$HOMEBREW_TAP_URL"
+else
     git remote add upstream "$HOMEBREW_TAP_URL"
 fi
 

@@ -71,9 +71,9 @@ SHA256=$(awk '{print $1}' "${DIST_DIR}/${SHA_FILE}")
 echo -e "${BLUE}🍺 Updating Homebrew cask for ${APP_NAME} v${VERSION}${NC}"
 echo ""
 
-# Clone/update tap in sibling dir
-APP_DIR_NAME=$(basename "$CATAPULT_APP_ROOT")
-cd ..
+# Clone/update tap inside the catapult checkout, where .gitignore keeps it from
+# showing up as untracked content in the app repo's submodule.
+cd "$SCRIPT_DIR"
 if [ -d "$HOMEBREW_DIR" ]; then
     cd "$HOMEBREW_DIR"
 else

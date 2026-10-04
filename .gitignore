@@ -4,5 +4,5 @@ __pycache__/
 # Claude Code local state
 .claude/
 
-# Homebrew tap clones made by push_homebrew.sh
-/homebrew-*/
+# Homebrew tap clone made by push_homebrew.sh
+/.tap/

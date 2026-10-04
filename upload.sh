@@ -163,14 +163,17 @@ if [ "$CATAPULT_BUILD_KIND" = "tauri" ]; then
 
             SIG_CONTENT=$(cat "$UPDATER_SIG_FILE")
             PUB_DATE_ISO=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-            # Updater bundle URL goes straight to S3, not through the API
-            # download route. The /download route assumes a single extension
-            # per app (DMG for humans); the in-app updater needs the .tar.gz
-            # and the two would collide on the same target key. Trade-off:
-            # auto-update downloads aren't counted in /{app}/stats. If we
-            # want them counted, add a separate /{app}/updater/{version}/{target}
-            # endpoint to api.douglaslassance.me.
-            DL_URL="${S3_PUBLIC_URL:-https://s3.douglaslassance.me}/${BUCKET_PREFIX}/${UPDATER_TAR}"
+            # Updater bundle URL goes straight to the bucket's public URL, not
+            # through the API download route. The /download route assumes a
+            # single extension per app (DMG for humans); the in-app updater
+            # needs the .tar.gz and the two would collide on the same target
+            # key. Whether these downloads are counted is up to whatever
+            # serves S3_PUBLIC_URL.
+            if [ -z "${S3_PUBLIC_URL:-}" ]; then
+                echo "❌ S3_PUBLIC_URL is required to publish the Tauri updater manifest"
+                exit 1
+            fi
+            DL_URL="${S3_PUBLIC_URL}/${BUCKET_PREFIX}/${UPDATER_TAR}"
             # Tauri keys platforms by `darwin-aarch64` / `darwin-x86_64` rather
             # than the Rust triples we use everywhere else; translate so the
             # client's auto-detected platform string matches.

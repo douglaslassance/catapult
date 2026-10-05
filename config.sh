@@ -31,29 +31,40 @@ fi
 # Load TOML into env
 eval "$(python3 "${CATAPULT_DIR}/parse_config.py" "$CATAPULT_CONFIG")"
 
-# Required for any kind/platform
+# Required for any kind/platform. On Android, bundle_id is the applicationId.
 : "${CATAPULT_APP_NAME:?app.name required in catapult.toml}"
 : "${CATAPULT_APP_SLUG:?app.slug required in catapult.toml}"
 : "${CATAPULT_APP_BUNDLE_ID:?app.bundle_id required in catapult.toml}"
-: "${CATAPULT_APP_TEAM_ID:?app.team_id required in catapult.toml}"
-: "${CATAPULT_APP_DEVELOPER:?app.developer required in catapult.toml}"
 
-# Build kind: "swift" (default), "tauri", or "xcodeproj"
+# Build kind: "swift" (default), "tauri", "xcodeproj", or "gradle"
 CATAPULT_BUILD_KIND="${CATAPULT_BUILD_KIND:-swift}"
 case "$CATAPULT_BUILD_KIND" in
-    swift|tauri|xcodeproj) ;;
-    *) echo "❌ catapult: build.kind must be 'swift', 'tauri', or 'xcodeproj' (got '$CATAPULT_BUILD_KIND')" >&2; exit 1 ;;
+    swift|tauri|xcodeproj|gradle) ;;
+    *) echo "❌ catapult: build.kind must be 'swift', 'tauri', 'xcodeproj', or 'gradle' (got '$CATAPULT_BUILD_KIND')" >&2; exit 1 ;;
 esac
 
-# Platform: "macos" (default) or "ios". iOS builds go through Xcode, so they
-# require kind = "xcodeproj" and ship only via the appstore channel.
+# Platform: "macos" (default), "ios", or "android". iOS builds go through Xcode,
+# so they require kind = "xcodeproj" and ship only via the appstore channel.
+# Android builds go through Gradle and ship only via the play channel.
 CATAPULT_BUILD_PLATFORM="${CATAPULT_BUILD_PLATFORM:-macos}"
 case "$CATAPULT_BUILD_PLATFORM" in
-    macos|ios) ;;
-    *) echo "❌ catapult: build.platform must be 'macos' or 'ios' (got '$CATAPULT_BUILD_PLATFORM')" >&2; exit 1 ;;
+    macos|ios|android) ;;
+    *) echo "❌ catapult: build.platform must be 'macos', 'ios', or 'android' (got '$CATAPULT_BUILD_PLATFORM')" >&2; exit 1 ;;
 esac
 if [ "$CATAPULT_BUILD_PLATFORM" = "ios" ] && [ "$CATAPULT_BUILD_KIND" != "xcodeproj" ]; then
     echo "❌ catapult: build.platform = 'ios' requires build.kind = 'xcodeproj'" >&2; exit 1
+fi
+if [ "$CATAPULT_BUILD_PLATFORM" = "android" ] && [ "$CATAPULT_BUILD_KIND" != "gradle" ]; then
+    echo "❌ catapult: build.platform = 'android' requires build.kind = 'gradle'" >&2; exit 1
+fi
+if [ "$CATAPULT_BUILD_KIND" = "gradle" ] && [ "$CATAPULT_BUILD_PLATFORM" != "android" ]; then
+    echo "❌ catapult: build.kind = 'gradle' requires build.platform = 'android'" >&2; exit 1
+fi
+
+# Apple signing identities are derived from these, so only Apple platforms need them.
+if [ "$CATAPULT_BUILD_PLATFORM" != "android" ]; then
+    : "${CATAPULT_APP_TEAM_ID:?app.team_id required in catapult.toml}"
+    : "${CATAPULT_APP_DEVELOPER:?app.developer required in catapult.toml}"
 fi
 
 # macOS SPM/Tauri required fields. The Xcode project supplies these itself for
@@ -87,6 +98,15 @@ if [ "$CATAPULT_BUILD_KIND" = "xcodeproj" ]; then
         echo "❌ catapult: build.project or build.workspace required for xcodeproj builds" >&2; exit 1
     fi
     CATAPULT_BUILD_CONFIGURATION="${CATAPULT_BUILD_CONFIGURATION:-Release}"
+fi
+
+# gradle fields (Android). Drives `./gradlew :<module>:<task>`; the app's own
+# Gradle config owns signing, so a release build must come out signed.
+if [ "$CATAPULT_BUILD_KIND" = "gradle" ]; then
+    CATAPULT_BUILD_MODULE="${CATAPULT_BUILD_MODULE:-app}"
+    CATAPULT_BUILD_TASK="${CATAPULT_BUILD_TASK:-bundleRelease}"
+    CATAPULT_BUILD_BUNDLE="${CATAPULT_BUILD_BUNDLE:-${CATAPULT_BUILD_MODULE}/build/outputs/bundle/release/${CATAPULT_BUILD_MODULE}-release.aab}"
+    export CATAPULT_BUILD_MODULE CATAPULT_BUILD_TASK CATAPULT_BUILD_BUNDLE
 fi
 
 # Defaults

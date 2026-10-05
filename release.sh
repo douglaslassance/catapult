@@ -5,9 +5,10 @@
 # build_appstore → verify_appstore → upload_appstore). Used both locally and
 # inside the catapult CD workflow so the two paths stay identical.
 #
-# Usage:   release.sh [version] [--channels s3,homebrew,appstore] [--no-testflight]
+# Usage:   release.sh [version] [--channels s3,homebrew,appstore,play] [--no-testflight]
 # Version: defaults to latest git tag, or 0.0.0.
-# Channels: defaults to "s3,homebrew" (App Store opt-in).
+# Channels: defaults to "s3,homebrew" on macOS (App Store opt-in), "appstore"
+# on iOS, and "play" on Android.
 #
 # --no-testflight uploads the iOS build but stops short of distributing it, for
 # when you want the build parked in App Store Connect rather than in front of
@@ -18,7 +19,7 @@
 # CD workflow handles certificate import as a prelude step.
 
 if [[ "$1" == "-h" || "$1" == "--help" ]]; then
-    sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
     exit 0
 fi
 
@@ -51,6 +52,8 @@ fi
 if [ -z "$CHANNELS" ]; then
     if [ "$CATAPULT_BUILD_PLATFORM" = "ios" ]; then
         CHANNELS="appstore"
+    elif [ "$CATAPULT_BUILD_PLATFORM" = "android" ]; then
+        CHANNELS="play"
     else
         CHANNELS="s3,homebrew"
     fi
@@ -76,6 +79,19 @@ if [ "$CATAPULT_BUILD_PLATFORM" = "ios" ]; then
         else
             echo "ℹ️  --no-testflight: build uploaded but not distributed."
         fi
+    fi
+    echo ""
+    echo "✅ Release v${VERSION} complete"
+    exit 0
+fi
+
+# Android: Gradle bundle published to a Google Play track.
+if [ "$CATAPULT_BUILD_PLATFORM" = "android" ]; then
+    if has_channel play; then
+        "${SCRIPT_DIR}/build_android.sh" "$VERSION"
+        "${SCRIPT_DIR}/upload_play.sh" "$VERSION"
+    else
+        echo "ℹ️  Android apps ship only via Google Play; nothing to do for: ${CHANNELS}"
     fi
     echo ""
     echo "✅ Release v${VERSION} complete"

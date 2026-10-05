@@ -7,11 +7,14 @@ publishes to:
 - a **Homebrew** cask (PR against any tap)
 - the **Mac App Store** (.pkg via App Store Connect)
 - **iOS TestFlight / App Store** (.ipa via App Store Connect)
+- **Google Play** (.aab via the Google Play Developer API)
 
 Supports **Swift Package Manager** and **Tauri** macOS apps (sharing the
 notarize / upload / Homebrew steps; only the build step differs), plus **iOS
 Xcode-project** apps (archived and exported by `xcodebuild`, uploaded to App
-Store Connect — which is what puts a build on TestFlight).
+Store Connect — which is what puts a build on TestFlight), plus **Android
+Gradle** apps (bundled and signed by the app's own Gradle build, published to a
+Google Play track).
 
 Each app picks which channels it ships through via its `catapult.toml`.
 
@@ -55,6 +58,29 @@ train that already passed review, and catapult mints a new marketing version per
 release, so essentially every release goes through review. And the App Store
 Connect key needs **App Manager** or Admin to submit for review, where uploading
 alone only needs Developer.
+
+### Android apps in brief
+
+Android support is `kind = "gradle"` + `platform = "android"` in
+`catapult.toml`, and it ships only through the `play` channel. `release.sh`
+runs the app's Gradle release task (`bundleRelease` by default), checks the
+bundle came out signed, and publishes it to a Google Play track:
+
+```sh
+./catapult/release.sh 1.2.3              # defaults to --channels play for Android
+./catapult/upload_play.sh --dry-run      # check the service account can reach the app
+```
+
+The version is the tag and the versionCode is the latest commit's Unix
+timestamp, the same scheme as iOS. catapult passes them to Gradle as
+`CATAPULT_VERSION` and `CATAPULT_BUILD_NUMBER`, so the app's
+`build.gradle.kts` should read those. Signing stays in the app's own Gradle
+config.
+
+Publishing needs a Google Cloud service account invited in Play Console with
+release permission, its JSON key base64-encoded in `PLAY_SERVICE_ACCOUNT_JSON`.
+With `[play] track = "internal"`, testers get the build as soon as the upload
+commits, with release notes from the commit subjects since the previous tag.
 
 ## Consuming catapult from an app
 
@@ -205,6 +231,7 @@ full annotated schema, including optional overrides.
 | appstore (CI) | `APPSTORE_CERT`, `APPSTORE_CERT_PASSWORD` | Apple Distribution cert (base64 .p12) |
 | appstore (CI) | `INSTALLER_CERT`, `INSTALLER_CERT_PASSWORD` | Mac Installer Distribution cert |
 | appstore (CI) | `PROVISIONING_PROFILE_B64` | base64 .provisionprofile |
+| play    | `PLAY_SERVICE_ACCOUNT_JSON` | Google Play service account key (base64 JSON) |
 
 For local builds: `APPSTORE_CERT` / `INSTALLER_CERT` / provisioning profile
 should already be in your keychain and `~/Library/MobileDevice/Provisioning Profiles/`.
@@ -214,3 +241,4 @@ should already be in your keychain and `~/Library/MobileDevice/Provisioning Prof
 - macOS with Xcode command-line tools
 - Python 3.11+ (`brew install python@3.12` if your system Python is older)
 - For uploads: `awscli`, `gh`, `brew` (auto-installed by scripts when missing)
+- For Android: a JDK (Gradle and `jarsigner`) and `openssl`

@@ -8,7 +8,7 @@ publishes to:
 - the **Mac App Store** (.pkg via App Store Connect)
 - **iOS TestFlight / App Store** (.ipa via App Store Connect)
 - **Google Play** (.aab via the Google Play Developer API)
-- downloadable **MSI**, **DEB** and **AppImage** builds next to the DMG, for Compose desktop apps
+- downloadable **MSI**, **DEB** and **AppImage** builds next to the DMG, for Compose and Tauri desktop apps
 
 Supports **Swift Package Manager** and **Tauri** macOS apps (sharing the
 notarize / upload / Homebrew steps; only the build step differs), plus **iOS
@@ -16,8 +16,8 @@ Xcode-project** apps (archived and exported by `xcodebuild`, uploaded to App
 Store Connect — which is what puts a build on TestFlight), plus **Android
 Gradle** apps (bundled and signed by the app's own Gradle build, published to a
 Google Play track), plus **Tauri mobile** apps that release on iOS and Android
-together, plus **Compose Multiplatform desktop** apps built on macOS, Windows
-and Linux.
+together, plus **Compose Multiplatform** and **Tauri** desktop apps built on
+macOS, Windows and Linux.
 
 Each app picks which channels it ships through via its `catapult.toml`.
 
@@ -125,12 +125,30 @@ a zero major version), merges `[plist.extras]`, `[plist.usage_descriptions]` and
 Linux AppImage takes its icon from `[build] linux_icon`, and appimagetool is
 downloaded on first use.
 
-Each host records the release with its own extension (`.dmg`, `.msi` or
-`.AppImage`). The download route serves one extension per target, so the
-Windows and Linux targets need per-target overrides on the product in the
-release API. In GitHub Actions, `platform: desktop` builds on `runner`
-(`macos-15` by default), `windows-latest` and `ubuntu-24.04`, and the Homebrew
-job takes the DMG from the macOS leg.
+Only the macOS host records the release, since the release API keeps the
+extension of a version's first record and the Homebrew cask downloads the
+`.dmg`. In GitHub Actions, `platform: desktop` builds on `runner` (`macos-15` by
+default), `windows-latest` and `ubuntu-24.04`, and the Homebrew job takes the
+DMG from the macOS leg.
+
+### Tauri desktop apps in brief
+
+A Tauri app releases on macOS, Windows and Linux the same way once
+`catapult.toml` sets `platform = "desktop"` next to `kind = "tauri"`, without
+`arch` or `target_triple` since the host decides them. Each host runs `tauri
+build` for its own bundles and leaves the artifacts in the table above in
+`dist/`. The macOS DMG is signed, notarized and stapled as before.
+
+With `bundle.createUpdaterArtifacts`, the updater manifest `${slug}.json` lists
+`darwin-aarch64` (the `.app.tar.gz`), `windows-x86_64` (the MSI, signed for the
+updater after Authenticode), `linux-x86_64` (the AppImage) and
+`linux-x86_64-deb` (the `.deb`, which an app installed from it picks first),
+each with its signature. Every host writes its entries to
+`dist/${slug}-${version}-${target}.updater.json`, and `upload_manifest.sh`
+merges fragments into the published manifest. Run locally, `upload.sh` does
+that for its own host at once. In GitHub Actions the legs run in parallel, so
+the `updater-manifest` job merges every fragment once all legs succeeded. Each
+leg needs `TAURI_SIGNING_PRIVATE_KEY` and its password.
 
 ## Consuming catapult from an app
 
@@ -212,7 +230,7 @@ jobs:
     secrets: inherit
     with:
       channels: "s3,homebrew"   # or "s3,appstore,homebrew"
-      # platform: desktop       # Compose apps, built on macOS, Windows and Linux
+      # platform: desktop       # Compose or Tauri apps, built on macOS, Windows and Linux
 ```
 
 When bumping the submodule SHA, update the `uses:` line to match.
@@ -244,7 +262,8 @@ kind          = "swift"                    # "swift", "tauri", "xcodeproj", "gra
 arch          = "arm64"
 target_triple = "aarch64-apple-darwin"
 swift_target  = "App"                      # SPM target name (swift only)
-# For Tauri: package_manager = "bun" | "pnpm" | "yarn" | "npm"
+# For Tauri: package_manager = "bun" | "pnpm" | "yarn" | "npm",
+#            platform = "desktop" for Windows and Linux too (no arch or target_triple)
 # For Compose: gradle_module = "composeApp", icon_assets = "composeApp/icons/Assets.car",
 #              linux_icon = "composeApp/icons/icon.png" (no arch or target_triple)
 
@@ -285,7 +304,8 @@ full annotated schema, including optional overrides.
 | appstore (CI) | `INSTALLER_CERT`, `INSTALLER_CERT_PASSWORD` | Mac Installer Distribution cert |
 | appstore (CI) | `PROVISIONING_PROFILE_B64` | base64 .provisionprofile |
 | play    | `PLAY_SERVICE_ACCOUNT_JSON` | Google Play service account key (base64 JSON) |
-| s3 (Compose on Windows) | `WINDOWS_CERTIFICATE`, `WINDOWS_CERTIFICATE_PASSWORD` | optional: Authenticode certificate (base64 .pfx) that signs the MSI |
+| s3 (desktop on Windows) | `WINDOWS_CERTIFICATE`, `WINDOWS_CERTIFICATE_PASSWORD` | optional: Authenticode certificate (base64 .pfx) that signs the MSI |
+| s3 (Tauri) | `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | updater signing key, needed on every host |
 
 For local builds: `APPSTORE_CERT` / `INSTALLER_CERT` / provisioning profile
 should already be in your keychain and `~/Library/MobileDevice/Provisioning Profiles/`.
@@ -299,3 +319,6 @@ should already be in your keychain and `~/Library/MobileDevice/Provisioning Prof
 - For Compose desktop apps: a JDK 17+ on every host, Git Bash and the Windows
   SDK's `signtool` on Windows (where `python` will do for Python), and `curl`
   on Linux to fetch appimagetool
+- For Tauri desktop apps: Rust and the app's package manager on every host, Git
+  Bash and `signtool` on Windows, and Tauri's Linux build dependencies
+  (WebKitGTK 4.1 and friends) on Linux

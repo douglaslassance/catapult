@@ -28,6 +28,7 @@ swift_target  = "App"                      # SPM target name; resource bundle is
 
 # For kind = "tauri", instead of swift_target use:
 # package_manager     = "bun"              # "bun", "pnpm", "yarn", or "npm"
+# platform            = "desktop"          # also Windows and Linux, see below
 # tauri_dir           = "src-tauri"        # default
 # frontend_build      = "bun run build"    # default = "${package_manager} run build"
 
@@ -121,10 +122,23 @@ swift_target  = "App"                      # SPM target name; resource bundle is
 # entitlements file. An adaptive icon wants CFBundleIconName = "AppIcon" in
 # [plist.extras] next to icon_assets.
 #
-# Every host records the release with its own extension, so the release API
-# needs per-target overrides for the Windows and Linux targets. Homebrew runs
-# only on a Mac, and the MSI is Authenticode signed when WINDOWS_CERTIFICATE is
-# set (see env.example).
+# Only the Mac records the release, which keeps the version's extension .dmg
+# for the Homebrew cask. Homebrew runs only on a Mac, and the MSI is
+# Authenticode signed when WINDOWS_CERTIFICATE is set (see env.example).
+
+# --- Tauri desktop apps -------------------------------------------------------
+# A Tauri app builds on macOS, Windows and Linux like a Compose app, and makes
+# the same artifacts, with:
+#
+# [build]
+# kind            = "tauri"
+# platform        = "desktop"              # no arch or target_triple, the host decides
+# package_manager = "bun"
+#
+# Each host runs `tauri build` for its own bundles (app, msi, or deb and
+# appimage). With bundle.createUpdaterArtifacts, the updater manifest
+# ${slug}.json lists every host's bundle with its signature, so every host needs
+# TAURI_SIGNING_PRIVATE_KEY (see env.example).
 
 # --- Optional channels --- presence of each section enables that channel.
 

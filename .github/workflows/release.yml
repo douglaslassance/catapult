@@ -9,6 +9,12 @@ name: Release (catapult)
 # certificates it needs. The script is the same one used locally — the only
 # difference is the cert-import prelude, which a developer's Keychain already
 # has. Jobs run in parallel (homebrew + appstore, after build-s3 completes).
+#
+# With `platform: desktop` (Compose apps, and Tauri apps that set
+# platform = "desktop"), build-desktop replaces build-s3 and builds on macOS,
+# Windows and Linux, since neither jpackage nor Tauri bundles for another OS.
+# Each Tauri leg writes its part of the updater manifest, and updater-manifest
+# merges them into one upload once every leg succeeded.
 
 on:
   workflow_call:
@@ -24,7 +30,7 @@ on:
         type: string
         default: "s3,homebrew"
       platform:
-        description: "Target platform: macos (default) or ios"
+        description: "Target platform: macos (default), ios, or desktop (Compose or Tauri on macOS, Windows and Linux)"
         required: false
         type: string
         default: "macos"
@@ -35,7 +41,7 @@ on:
 
 jobs:
   build-s3:
-    if: contains(inputs.channels, 's3')
+    if: contains(inputs.channels, 's3') && inputs.platform != 'desktop'
     name: Build, notarize, upload (S3)
     runs-on: ${{ inputs.runner }}
     steps:
@@ -101,10 +107,192 @@ jobs:
           path: dist/
           if-no-files-found: error
 
+  build-desktop:
+    if: contains(inputs.channels, 's3') && inputs.platform == 'desktop'
+    name: Build, sign, upload (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # The macOS leg runs on inputs.runner so the homebrew job derives the same target triple.
+        os: ["${{ inputs.runner }}", windows-latest, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    outputs:
+      kind: ${{ steps.cfg.outputs.kind }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # Windows runners check out with CRLF, which bash cannot run.
+      - name: Keep LF line endings
+        if: runner.os == 'Windows'
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Resolve version
+        id: ver
+        run: |
+          V="${{ inputs.version }}"
+          if [ -z "$V" ]; then
+            if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+              V="${GITHUB_REF#refs/tags/}"
+            else
+              V="$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.0)"
+            fi
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      # catapult's TOML loader needs Python 3.11+, which Windows runners lack by default.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Read the build kind
+        id: cfg
+        run: |
+          read_build() {
+            python -c "import sys, tomllib; print(tomllib.load(open('catapult.toml', 'rb')).get('build', {}).get(sys.argv[1], sys.argv[2]))" "$1" "$2" | tr -d '\r'
+          }
+          echo "kind=$(read_build kind swift)" >> "$GITHUB_OUTPUT"
+          echo "package_manager=$(read_build package_manager npm)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v4
+        if: steps.cfg.outputs.kind == 'compose'
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+        if: steps.cfg.outputs.kind == 'compose'
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.cfg.outputs.kind == 'tauri'
+
+      - uses: oven-sh/setup-bun@v2
+        if: steps.cfg.outputs.kind == 'tauri' && steps.cfg.outputs.package_manager == 'bun'
+
+      - name: Enable pnpm and yarn
+        if: steps.cfg.outputs.kind == 'tauri' && (steps.cfg.outputs.package_manager == 'pnpm' || steps.cfg.outputs.package_manager == 'yarn')
+        run: corepack enable
+
+      - name: Install Tauri's Linux dependencies
+        if: steps.cfg.outputs.kind == 'tauri' && runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev patchelf xdg-utils
+
+      - name: Select Xcode
+        if: runner.os == 'macOS'
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+      - name: Import Developer ID certificate
+        if: runner.os == 'macOS'
+        env:
+          APPLE_DEVELOPER_CERT: ${{ secrets.APPLE_DEVELOPER_CERT }}
+          APPLE_DEVELOPER_CERT_PASSWORD: ${{ secrets.APPLE_DEVELOPER_CERT_PASSWORD }}
+        run: |
+          CERT_FILE=$(mktemp /tmp/certificate_XXXXXX.p12)
+          echo "$APPLE_DEVELOPER_CERT" | base64 --decode > "$CERT_FILE"
+          KEYCHAIN_PATH=$(mktemp -d)/build.keychain
+          KEYCHAIN_PASSWORD=$(openssl rand -hex 16)
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_FILE" -P "$APPLE_DEVELOPER_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          rm -f "$CERT_FILE"
+
+      - name: Build, sign, upload
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ runner.os == 'macOS' && secrets.APPLE_SIGNING_IDENTITY || '' }}
+          NOTARIZATION_KEY: ${{ runner.os == 'macOS' && secrets.NOTARIZATION_KEY || '' }}
+          NOTARIZATION_KEY_ID: ${{ runner.os == 'macOS' && secrets.NOTARIZATION_KEY_ID || '' }}
+          NOTARIZATION_ISSUER_ID: ${{ runner.os == 'macOS' && secrets.NOTARIZATION_ISSUER_ID || '' }}
+          WINDOWS_CERTIFICATE: ${{ runner.os == 'Windows' && secrets.WINDOWS_CERTIFICATE || '' }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ runner.os == 'Windows' && secrets.WINDOWS_CERTIFICATE_PASSWORD || '' }}
+          S3_ACCOUNT_ID: ${{ secrets.S3_ACCOUNT_ID }}
+          S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+          S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
+          S3_PUBLIC_URL: ${{ secrets.S3_PUBLIC_URL }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          RELEASE_API_URL: ${{ secrets.RELEASE_API_URL }}
+          RELEASE_API_TOKEN: ${{ secrets.RELEASE_API_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # The legs run in parallel, so updater-manifest publishes the manifest once they all succeeded.
+          CATAPULT_DEFER_UPDATER_MANIFEST: "1"
+        run: ./catapult/release.sh "${{ steps.ver.outputs.version }}" --channels s3
+
+      - name: Save artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-desktop-${{ matrix.os }}
+          path: dist/
+          if-no-files-found: error
+
+      # A pre-release or an app without updater artifacts writes no fragment.
+      - name: Save the updater manifest fragment
+        if: steps.cfg.outputs.kind == 'tauri'
+        uses: actions/upload-artifact@v4
+        with:
+          name: updater-${{ matrix.os }}
+          path: dist/*.updater.json
+          if-no-files-found: ignore
+
+  updater-manifest:
+    if: needs.build-desktop.outputs.kind == 'tauri'
+    name: Publish the Tauri updater manifest
+    needs: build-desktop
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Resolve version
+        id: ver
+        run: |
+          V="${{ inputs.version }}"
+          if [ -z "$V" ]; then
+            if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+              V="${GITHUB_REF#refs/tags/}"
+            else
+              V="$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.0)"
+            fi
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: updater-*
+          path: updater/
+          merge-multiple: true
+
+      - name: Merge and upload the manifest
+        env:
+          S3_ACCOUNT_ID: ${{ secrets.S3_ACCOUNT_ID }}
+          S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+          S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
+          S3_PUBLIC_URL: ${{ secrets.S3_PUBLIC_URL }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: |
+          shopt -s nullglob
+          ./catapult/upload_manifest.sh "${{ steps.ver.outputs.version }}" updater/*.updater.json
+
   homebrew:
-    if: contains(inputs.channels, 'homebrew')
+    # A desktop release takes the DMG from the build-desktop leg that ran on inputs.runner.
+    if: >-
+      !cancelled() && contains(inputs.channels, 'homebrew') &&
+      (needs.build-s3.result == 'success' || needs.build-desktop.result == 'success')
     name: Homebrew cask PR
-    needs: build-s3
+    needs: [build-s3, build-desktop]
     runs-on: ${{ inputs.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -113,7 +301,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: dist-s3
+          name: ${{ inputs.platform == 'desktop' && format('dist-desktop-{0}', inputs.runner) || 'dist-s3' }}
           path: dist/
 
       - name: Resolve version
@@ -136,7 +324,7 @@ jobs:
         run: ./catapult/release.sh "${{ steps.ver.outputs.version }}" --channels homebrew
 
   appstore:
-    if: contains(inputs.channels, 'appstore') && inputs.platform != 'ios'
+    if: contains(inputs.channels, 'appstore') && inputs.platform != 'ios' && inputs.platform != 'desktop'
     name: Build + upload (Mac App Store)
     runs-on: ${{ inputs.runner }}
     steps:

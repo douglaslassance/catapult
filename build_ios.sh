@@ -4,23 +4,26 @@
 # build_appstore.sh; where the macOS path hand-assembles a .app from SPM
 # output, iOS lets xcodebuild do the archiving, signing, and packaging.
 #
-# Requires build.kind = "xcodeproj", build.platform = "ios", and an [appstore]
-# section in catapult.toml.
+# Requires build.kind = "xcodeproj" or "tauri", build.platform = "ios" (or
+# "ios" among build.platforms), and an [appstore] section in catapult.toml.
+# A Tauri app is archived by `tauri ios build`, which drives the Xcode project
+# Tauri generated and leaves the .ipa where upload_ios.sh looks for it.
 #
 # Usage: build_ios.sh [version]
 
 if [[ "$1" == "-h" || "$1" == "--help" ]]; then
-    sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'
     exit 0
 fi
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CATAPULT_PLATFORM=ios
 source "${SCRIPT_DIR}/config.sh"
 
-if [ "$CATAPULT_BUILD_KIND" != "xcodeproj" ] || [ "$CATAPULT_BUILD_PLATFORM" != "ios" ]; then
-    echo "❌ build_ios.sh requires build.kind = 'xcodeproj' and build.platform = 'ios'" >&2
+if [ "$CATAPULT_BUILD_KIND" != "xcodeproj" ] && [ "$CATAPULT_BUILD_KIND" != "tauri" ]; then
+    echo "❌ build_ios.sh requires build.kind = 'xcodeproj' or 'tauri'" >&2
     exit 1
 fi
 if [ -z "${CATAPULT_HAS_APPSTORE:-}" ]; then
@@ -63,6 +66,38 @@ fi
 
 rm -rf "$ARCHIVE" "$EXPORT_DIR"
 mkdir -p "$BUILD_DIR"
+
+# Tauri archives and exports through its own CLI, since the Xcode project it
+# generates builds the Rust code with a script that only that CLI can serve.
+if [ "$CATAPULT_BUILD_KIND" = "tauri" ]; then
+    echo "📦 Installing dependencies…"
+    catapult_install_dependencies
+    echo ""
+
+    # The bundle version is the build number alone, as CFBundleVersion takes at most three parts.
+    TAURI_CONFIG="{\"bundle\":{\"iOS\":{\"bundleVersion\":\"${BUILD_NUMBER}\"}}}"
+    [ -n "$VERSION" ] && TAURI_CONFIG="{\"version\":\"${VERSION}\",${TAURI_CONFIG#\{}"
+
+    # Tauri signs automatically; in CI it takes the App Store Connect key under its own names.
+    if [ -n "${CI:-}" ] && [ -n "${NOTARIZATION_KEY_ID:-}" ] && [ -n "${NOTARIZATION_ISSUER_ID:-}" ] && [ -n "${NOTARIZATION_KEY:-}" ]; then
+        KEYDIR="${HOME}/.appstoreconnect/private_keys"
+        mkdir -p "$KEYDIR"
+        export APPLE_API_KEY_PATH="${KEYDIR}/AuthKey_${NOTARIZATION_KEY_ID}.p8"
+        echo "$NOTARIZATION_KEY" | base64 --decode > "$APPLE_API_KEY_PATH"
+        export APPLE_API_KEY="$NOTARIZATION_KEY_ID" APPLE_API_ISSUER="$NOTARIZATION_ISSUER_ID"
+    fi
+
+    echo "📦 Running tauri ios build…"
+    catapult_tauri ios build --ci --export-method app-store-connect --config "$TAURI_CONFIG"
+    echo ""
+
+    IPA_SRC="$(ls "${CATAPULT_BUILD_TAURI_DIR}"/gen/apple/build/arm64/*.ipa 2>/dev/null | head -1)"
+    [ -n "$IPA_SRC" ] || { echo "❌ tauri ios build produced no .ipa in ${CATAPULT_BUILD_TAURI_DIR}/gen/apple/build/arm64" >&2; exit 1; }
+    mkdir -p "$EXPORT_DIR"
+    cp "$IPA_SRC" "$EXPORT_DIR/"
+    echo "📦 IPA: ${EXPORT_DIR}/$(basename "$IPA_SRC")"
+    exit 0
+fi
 
 # Project vs workspace selector.
 if [ -n "${CATAPULT_BUILD_WORKSPACE:-}" ]; then

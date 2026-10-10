@@ -43,12 +43,9 @@ while [ $# -gt 0 ]; do
     esac
 done
 
+CATAPULT_PLATFORM=android
 source "${SCRIPT_DIR}/config.sh"
 
-if [ "$CATAPULT_BUILD_PLATFORM" != "android" ]; then
-    echo "❌ upload_play.sh requires build.platform = 'android'" >&2
-    exit 1
-fi
 if [ -z "${CATAPULT_HAS_PLAY:-}" ]; then
     echo "❌ [play] section missing from catapult.toml" >&2
     exit 1
@@ -85,7 +82,7 @@ TRACK="${CATAPULT_PLAY_TRACK:-internal}"
 echo "🤖 Publishing ${CATAPULT_APP_NAME} v${VERSION:-<project default>} (versionCode ${BUILD_NUMBER}) to the ${TRACK} track"
 echo ""
 
-python3 "${SCRIPT_DIR}/upload_play.py" \
+"$CATAPULT_PYTHON" "${SCRIPT_DIR}/upload_play.py" \
     --package "$CATAPULT_APP_BUNDLE_ID" \
     --bundle "$CATAPULT_BUILD_BUNDLE" \
     --track "$TRACK" \

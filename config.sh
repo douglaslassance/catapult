@@ -28,7 +28,7 @@ if [ ! -f "$CATAPULT_CONFIG" ]; then
     exit 1
 fi
 
-# The OS this runs on. Compose desktop builds can only produce artifacts for it.
+# The OS this runs on. Desktop builds can only produce artifacts for it.
 case "$(uname -s)" in
     Darwin) CATAPULT_HOST_OS=macos ;;
     Linux) CATAPULT_HOST_OS=linux ;;
@@ -99,8 +99,9 @@ fi
 if [ "$CATAPULT_BUILD_KIND" = "gradle" ] && [ "$CATAPULT_BUILD_PLATFORM" != "android" ]; then
     echo "❌ catapult: build.kind = 'gradle' requires build.platform = 'android'" >&2; exit 1
 fi
-if [ "$CATAPULT_BUILD_PLATFORM" = "desktop" ] && [ "$CATAPULT_BUILD_KIND" != "compose" ]; then
-    echo "❌ catapult: build.platform = 'desktop' requires build.kind = 'compose'" >&2; exit 1
+# Desktop builds run once per host (macOS, Windows and Linux). Compose always does, Tauri opts in.
+if [ "$CATAPULT_BUILD_PLATFORM" = "desktop" ] && [ "$CATAPULT_BUILD_KIND" != "compose" ] && [ "$CATAPULT_BUILD_KIND" != "tauri" ]; then
+    echo "❌ catapult: build.platform = 'desktop' requires build.kind = 'compose' or 'tauri'" >&2; exit 1
 fi
 if [ "$CATAPULT_BUILD_KIND" = "compose" ] && [ "$CATAPULT_BUILD_PLATFORM" != "desktop" ]; then
     echo "❌ catapult: build.kind = 'compose' requires build.platform = 'desktop'" >&2; exit 1
@@ -160,8 +161,8 @@ if [ "$CATAPULT_BUILD_KIND" = "gradle" ]; then
     export CATAPULT_BUILD_MODULE CATAPULT_BUILD_TASK CATAPULT_BUILD_BUNDLE
 fi
 
-# compose fields (desktop). jpackage cannot cross-build, so the target triple names the host unless set.
-if [ "$CATAPULT_BUILD_KIND" = "compose" ]; then
+# Desktop fields. Neither jpackage nor a Tauri bundle cross-builds, so the target triple names the host unless set.
+if [ "$CATAPULT_BUILD_PLATFORM" = "desktop" ]; then
     if [ "$CATAPULT_HOST_OS" = "macos" ]; then
         : "${CATAPULT_APP_MIN_MACOS:?app.min_macos required in catapult.toml}"
     fi
@@ -175,9 +176,14 @@ if [ "$CATAPULT_BUILD_KIND" = "compose" ]; then
             *) echo "❌ catapult: cannot derive build.target_triple on $(uname -s) $(uname -m); set it in catapult.toml" >&2; exit 1 ;;
         esac
     fi
+    export CATAPULT_BUILD_TARGET_TRIPLE
+fi
+
+# compose fields
+if [ "$CATAPULT_BUILD_KIND" = "compose" ]; then
     CATAPULT_BUILD_GRADLE_MODULE="${CATAPULT_BUILD_GRADLE_MODULE:-composeApp}"
     CATAPULT_BUILD_LINUX_ICON="${CATAPULT_BUILD_LINUX_ICON:-${CATAPULT_BUILD_GRADLE_MODULE}/icons/icon.png}"
-    export CATAPULT_BUILD_TARGET_TRIPLE CATAPULT_BUILD_GRADLE_MODULE CATAPULT_BUILD_LINUX_ICON CATAPULT_BUILD_ICON_ASSETS
+    export CATAPULT_BUILD_GRADLE_MODULE CATAPULT_BUILD_LINUX_ICON CATAPULT_BUILD_ICON_ASSETS
 fi
 
 # Defaults

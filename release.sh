@@ -10,8 +10,9 @@
 # Channels: defaults to "s3,homebrew" on macOS (App Store opt-in), "appstore"
 # on iOS, and "play" on Android. An app that lists several build.platforms
 # releases each of them under the same version, e.g. "appstore,play" for a
-# Tauri app on iOS and Android. A Compose desktop app also defaults to
-# "s3,homebrew", builds for the host it runs on, and skips homebrew off a Mac.
+# Tauri app on iOS and Android. A desktop app (Compose, or Tauri with
+# platform = "desktop") also defaults to "s3,homebrew", builds for the host it
+# runs on, and skips homebrew off a Mac.
 #
 # --no-testflight uploads the iOS build but stops short of distributing it, for
 # when you want the build parked in App Store Connect rather than in front of
@@ -22,7 +23,7 @@
 # CD workflow handles certificate import as a prelude step.
 
 if [[ "$1" == "-h" || "$1" == "--help" ]]; then
-    sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
     exit 0
 fi
 
@@ -109,7 +110,7 @@ release_macos() {
     fi
 }
 
-# Desktop (Compose): each host builds and uploads its own artifacts, and only a Mac has the DMG Homebrew wants.
+# Desktop (Compose or Tauri): each host builds and uploads its own artifacts, and only a Mac has the DMG Homebrew wants.
 release_desktop() {
     if has_channel s3; then
         "${SCRIPT_DIR}/build.sh" "$VERSION"
@@ -125,7 +126,7 @@ release_desktop() {
     fi
 
     if has_channel appstore; then
-        echo "ℹ️  Compose desktop apps do not ship to the App Store; ignoring appstore."
+        echo "ℹ️  Desktop apps do not ship to the App Store; ignoring appstore."
     fi
 }
 

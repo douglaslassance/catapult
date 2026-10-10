@@ -1,6 +1,6 @@
 #!/bin/bash
 # upload.sh - Upload DMG (+ Sparkle appcast) to S3-compatible storage, then record the release.
-# Compose desktop builds upload every artifact their host produced (.dmg, .msi, .deb, .AppImage).
+# Desktop builds (Compose or Tauri) upload every artifact their host produced (.dmg, .msi, .deb, .AppImage).
 # Requires [s3] section in catapult.toml.
 #
 # Usage: upload.sh [version]
@@ -36,8 +36,8 @@ APPCAST_FILE_NAME="${CATAPULT_S3_APPCAST_FILENAME:-${SLUG}.xml}"
 # Template uses {version} and {target} placeholders.
 DOWNLOAD_URL_TEMPLATE="${CATAPULT_S3_DOWNLOAD_URL_TEMPLATE:?s3.download_url_template required}"
 
-# Compose uploads whatever this host built, and its release records the artifact people download here.
-if [ "$CATAPULT_BUILD_KIND" = "compose" ]; then
+# A desktop build uploads whatever this host built, and its release records the artifact people download here.
+if [ "$CATAPULT_BUILD_PLATFORM" = "desktop" ]; then
     case "$CATAPULT_HOST_OS" in
         windows) RELEASE_EXTENSION=".msi" ;;
         linux) RELEASE_EXTENSION=".AppImage" ;;
@@ -54,7 +54,7 @@ if [ "$CATAPULT_BUILD_KIND" = "compose" ]; then
     done
 fi
 
-if [ "$CATAPULT_BUILD_KIND" != "compose" ] && [ ! -f "${DIST_DIR}/${DMG_FILE}" ]; then
+if [ "$CATAPULT_BUILD_PLATFORM" != "desktop" ] && [ ! -f "${DIST_DIR}/${DMG_FILE}" ]; then
     echo "❌ ${DIST_DIR}/${DMG_FILE} not found — run build.sh first"
     exit 1
 fi
@@ -84,8 +84,8 @@ aws configure set region auto
 R2_ENDPOINT="https://${S3_ACCOUNT_ID}.r2.cloudflarestorage.com"
 
 for FILE in "${ARTIFACTS[@]}"; do
-    case "$CATAPULT_BUILD_KIND" in
-        compose) LABEL="$FILE" ;;
+    case "$CATAPULT_BUILD_PLATFORM" in
+        desktop) LABEL="$FILE" ;;
         *) LABEL="DMG" ;;
     esac
     echo "☁️  Uploading ${LABEL}..."
@@ -272,7 +272,7 @@ if [ "$IS_PRERELEASE" = "1" ]; then
 elif [ -z "${RELEASE_API_TOKEN:-}" ] || [ -z "${RELEASE_API_URL:-}" ]; then
     echo "⚠️  Skipping release record (RELEASE_API_TOKEN or RELEASE_API_URL not set)"
     echo ""
-elif [ "$CATAPULT_BUILD_KIND" = "compose" ] && [ "$CATAPULT_HOST_OS" != "macos" ]; then
+elif [ "$CATAPULT_BUILD_PLATFORM" = "desktop" ] && [ "$CATAPULT_HOST_OS" != "macos" ]; then
     # The API keeps the extension the first record of a version sends, so only the Mac leg records and the cask keeps its .dmg.
     echo "ℹ️  Skipping release record (the macOS build records it)"
     echo ""
@@ -325,7 +325,7 @@ fi
 DOWNLOAD_URL="${DOWNLOAD_URL_TEMPLATE//\{version\}/$VERSION}"
 DOWNLOAD_URL="${DOWNLOAD_URL//\{target\}/$TARGET}"
 echo "✅ Upload complete!"
-if [ "$CATAPULT_BUILD_KIND" = "compose" ]; then
+if [ "$CATAPULT_BUILD_PLATFORM" = "desktop" ]; then
     echo "📦 Download: ${DOWNLOAD_URL}"
 else
     echo "📦 DMG: ${DOWNLOAD_URL}"

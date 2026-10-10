@@ -239,6 +239,52 @@ catapult_install_dependencies() {
     esac
 }
 
+# Writes <file>.sha256, with sha256sum where shasum is missing (Git Bash).
+catapult_checksum() {
+    local file="$1"
+    if command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$file" > "${file}.sha256"
+    else
+        sha256sum "$file" > "${file}.sha256"
+    fi
+    cat "${file}.sha256"
+}
+
+# signtool ships with the Windows SDK, which rarely puts it on PATH, so the newest x64 build is used.
+catapult_find_signtool() {
+    if command -v signtool >/dev/null 2>&1; then
+        command -v signtool
+    else
+        ls "/c/Program Files (x86)/Windows Kits/10/bin/"*/x64/signtool.exe 2>/dev/null | sort -V | tail -1
+    fi
+}
+
+# Authenticode signs an MSI with WINDOWS_CERTIFICATE (a base64 .pfx) and its password.
+catapult_sign_msi() {
+    local msi="$1" signtool pfx_dir pfx
+    echo "🔏 Signing MSI with Authenticode..."
+    signtool="$(catapult_find_signtool)"
+    if [ -z "$signtool" ]; then
+        echo "❌ signtool not found. Install the Windows SDK or put signtool on PATH."
+        exit 1
+    fi
+    pfx_dir="$(mktemp -d)"
+    pfx="${pfx_dir}/certificate.pfx"
+    echo "$WINDOWS_CERTIFICATE" | base64 --decode > "$pfx"
+    # Git Bash would rewrite signtool's /flags as paths, so conversion is off and the paths are converted by hand.
+    if ! MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' "$signtool" sign /fd sha256 \
+        /f "$(cygpath -w "$pfx")" /p "$WINDOWS_CERTIFICATE_PASSWORD" \
+        /tr http://timestamp.digicert.com /td sha256 \
+        "$(cygpath -w "$msi")"; then
+        rm -rf "$pfx_dir"
+        echo "❌ signtool could not sign ${msi}"
+        exit 1
+    fi
+    rm -rf "$pfx_dir"
+    echo "✅ Signed"
+    echo ""
+}
+
 # Sparkle's `sign_update` prints a whole attribute pair rather than the
 # signature on its own:
 #

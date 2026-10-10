@@ -51,17 +51,6 @@ gradle_tasks() {
     echo ""
 }
 
-# Writes dist/<file>.sha256, with sha256sum where shasum is missing (Git Bash).
-checksum() {
-    local file="${DIST_DIR}/$1"
-    if command -v shasum >/dev/null 2>&1; then
-        shasum -a 256 "$file" > "${file}.sha256"
-    else
-        sha256sum "$file" > "${file}.sha256"
-    fi
-    cat "${file}.sha256"
-}
-
 # Hardened runtime and a secure timestamp on every signature, as notarization requires.
 sign() {
     codesign --force --sign "$APPLE_SIGNING_IDENTITY" --options runtime --timestamp "$@"
@@ -255,41 +244,7 @@ build_macos() {
 
     # After stapling, which modifies the DMG.
     echo "🔐 Generating checksum..."
-    checksum "$dmg"
-    echo ""
-}
-
-# signtool ships with the Windows SDK, which rarely puts it on PATH, so the newest x64 build is used.
-find_signtool() {
-    if command -v signtool >/dev/null 2>&1; then
-        command -v signtool
-    else
-        ls "/c/Program Files (x86)/Windows Kits/10/bin/"*/x64/signtool.exe 2>/dev/null | sort -V | tail -1
-    fi
-}
-
-sign_msi() {
-    local msi="$1" signtool pfx_dir pfx
-    echo "🔏 Signing MSI with Authenticode..."
-    signtool="$(find_signtool)"
-    if [ -z "$signtool" ]; then
-        echo "❌ signtool not found. Install the Windows SDK or put signtool on PATH."
-        exit 1
-    fi
-    pfx_dir="$(mktemp -d)"
-    pfx="${pfx_dir}/certificate.pfx"
-    echo "$WINDOWS_CERTIFICATE" | base64 --decode > "$pfx"
-    # Git Bash would rewrite signtool's /flags as paths, so conversion is off and the paths are converted by hand.
-    if ! MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' "$signtool" sign /fd sha256 \
-        /f "$(cygpath -w "$pfx")" /p "$WINDOWS_CERTIFICATE_PASSWORD" \
-        /tr http://timestamp.digicert.com /td sha256 \
-        "$(cygpath -w "$msi")"; then
-        rm -rf "$pfx_dir"
-        echo "❌ signtool could not sign ${msi}"
-        exit 1
-    fi
-    rm -rf "$pfx_dir"
-    echo "✅ Signed"
+    catapult_checksum "${DIST_DIR}/${dmg}"
     echo ""
 }
 
@@ -308,14 +263,14 @@ build_windows() {
     echo ""
 
     if [ -n "${WINDOWS_CERTIFICATE:-}" ] && [ -n "${WINDOWS_CERTIFICATE_PASSWORD:-}" ]; then
-        sign_msi "${DIST_DIR}/${msi}"
+        catapult_sign_msi "${DIST_DIR}/${msi}"
     else
         echo "⚠️  Authenticode signing skipped (WINDOWS_CERTIFICATE not set)"
         echo ""
     fi
 
     echo "🔐 Generating checksum..."
-    checksum "$msi"
+    catapult_checksum "${DIST_DIR}/${msi}"
     echo ""
 }
 
@@ -393,8 +348,8 @@ DESKTOP
     echo ""
 
     echo "🔐 Generating checksums..."
-    checksum "$deb"
-    checksum "$appimage"
+    catapult_checksum "${DIST_DIR}/${deb}"
+    catapult_checksum "${DIST_DIR}/${appimage}"
     echo ""
 }
 

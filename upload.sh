@@ -188,7 +188,7 @@ if [ "$CATAPULT_BUILD_KIND" = "tauri" ]; then
                 --endpoint-url "$R2_ENDPOINT" 2>/dev/null || true)
 
             MANIFEST_FILE=$(mktemp /tmp/tauri_manifest_XXXXXX.json)
-            python3 - "$VERSION" "$PUB_DATE_ISO" "$TAURI_TARGET" "$SIG_CONTENT" "$DL_URL" "$EXISTING" > "$MANIFEST_FILE" <<'PYEOF'
+            "$CATAPULT_PYTHON" - "$VERSION" "$PUB_DATE_ISO" "$TAURI_TARGET" "$SIG_CONTENT" "$DL_URL" "$EXISTING" > "$MANIFEST_FILE" <<'PYEOF'
 import json, sys
 version, pub_date, target, sig, url, existing = sys.argv[1:7]
 try:

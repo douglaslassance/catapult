@@ -97,7 +97,7 @@ if [ -n "$BUNDLE_PATH" ] && [ -d "$CATAPULT_BUILD_ASSETS" ]; then
 fi
 
 # Info.plist for the app bundle
-python3 "${SCRIPT_DIR}/render_plist.py" "$CATAPULT_CONFIG" \
+"$CATAPULT_PYTHON" "${SCRIPT_DIR}/render_plist.py" "$CATAPULT_CONFIG" \
     --kind direct --version "$VERSION" \
     --out "${APP_PATH}/Contents/Info.plist"
 
@@ -120,7 +120,7 @@ echo "APPL????" > "${APP_PATH}/Contents/PkgInfo"
 
 # Resource bundle Info.plist (codesign/notarization scanner expects one)
 if [ -n "$BUNDLE_PATH" ]; then
-    python3 "${SCRIPT_DIR}/render_plist.py" "$CATAPULT_CONFIG" \
+    "$CATAPULT_PYTHON" "${SCRIPT_DIR}/render_plist.py" "$CATAPULT_CONFIG" \
         --kind resource --version "$VERSION" \
         --out "${BUNDLE_PATH}/Info.plist"
 fi

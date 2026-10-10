@@ -28,8 +28,18 @@ if [ ! -f "$CATAPULT_CONFIG" ]; then
     exit 1
 fi
 
+# Windows runners may only have `python`, so every script uses the interpreter resolved here.
+if [ -z "${CATAPULT_PYTHON:-}" ]; then
+    if python3 --version >/dev/null 2>&1; then
+        CATAPULT_PYTHON=python3
+    else
+        CATAPULT_PYTHON=python
+    fi
+fi
+export CATAPULT_PYTHON
+
 # Load TOML into env
-eval "$(python3 "${CATAPULT_DIR}/parse_config.py" "$CATAPULT_CONFIG")"
+eval "$("$CATAPULT_PYTHON" "${CATAPULT_DIR}/parse_config.py" "$CATAPULT_CONFIG")"
 
 # Required for any kind/platform. On Android, bundle_id is the applicationId.
 : "${CATAPULT_APP_NAME:?app.name required in catapult.toml}"

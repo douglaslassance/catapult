@@ -98,7 +98,7 @@ echo "What to Test:"
 sed 's/^/   /' "$NOTES_FILE"
 echo ""
 
-python3 "${SCRIPT_DIR}/testflight_ios.py" \
+"$CATAPULT_PYTHON" "${SCRIPT_DIR}/testflight_ios.py" \
     --config "$CATAPULT_CONFIG" \
     --version "$VERSION" \
     --build-number "$BUILD_NUMBER" \

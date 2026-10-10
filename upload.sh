@@ -27,7 +27,8 @@ APP_NAME="$CATAPULT_APP_NAME"
 SLUG="$CATAPULT_APP_SLUG"
 TARGET="$CATAPULT_BUILD_TARGET_TRIPLE"
 DIST_DIR="$CATAPULT_DIST_DIR"
-DMG_FILE="${SLUG}-${VERSION}-${TARGET}.dmg"
+BASENAME="${SLUG}-${VERSION}-${TARGET}"
+DMG_FILE="${BASENAME}.dmg"
 ARTIFACTS=("$DMG_FILE")
 RELEASE_EXTENSION=".dmg"
 
@@ -162,105 +163,78 @@ APPCAST
     fi
 fi
 
-# Tauri updater manifest — analogous to the Sparkle appcast above but for
-# Tauri apps. Generates s3://${bucket}/${prefix}/${slug}.json in the format
-# the `tauri-plugin-updater` plugin expects, and uploads the matching
-# ${slug}-${version}-${target}.tar.gz bundle next to it. Read-modify-write
-# so a second-target build for the same version adds an entry rather than
-# wiping the first.
+# Tauri updater. Each host uploads the bundles it signed and writes a fragment,
+# dist/${slug}-${version}-${target}.updater.json, holding its entries of the
+# manifest tauri-plugin-updater reads. upload_manifest.sh merges fragments into
+# ${slug}.json, here for this host alone, or once for every host when CI sets
+# CATAPULT_DEFER_UPDATER_MANIFEST because the hosts build in parallel.
 if [ "$CATAPULT_BUILD_KIND" = "tauri" ]; then
     if [ "$IS_PRERELEASE" = "1" ]; then
-        echo "⚠️  Skipping Tauri manifest update (pre-release: $VERSION)"
+        echo "⚠️  Skipping Tauri updater (pre-release: $VERSION)"
         echo ""
     else
-        UPDATER_TAR="${SLUG}-${VERSION}-${TARGET}.tar.gz"
-        UPDATER_SIG_FILE="${DIST_DIR}/${UPDATER_TAR}.sig"
-        TAURI_MANIFEST_NAME="${SLUG}.json"
-        if [ ! -f "${DIST_DIR}/${UPDATER_TAR}" ] || [ ! -f "${UPDATER_SIG_FILE}" ]; then
-            echo "⚠️  Updater artifacts not found in ${DIST_DIR} (${UPDATER_TAR}{,.sig})"
-            echo "   — Tauri signing keys probably weren't set during build. Skipping."
+        # Tauri names platforms <os>-<arch> after its own OS names, and an installer suffix picks a bundle by how the app was installed.
+        case "$TARGET" in
+            *-apple-darwin) TAURI_OS=darwin ;;
+            *-windows-*) TAURI_OS=windows ;;
+            *-linux-*) TAURI_OS=linux ;;
+            *) echo "❌ No Tauri updater platform for ${TARGET}"; exit 1 ;;
+        esac
+        TAURI_PLATFORM="${TAURI_OS}-${TARGET%%-*}"
+        UPDATER_FRAGMENT="${DIST_DIR}/${BASENAME}.updater.json"
+        UPDATER_ENTRIES=""
+        UPDATER_UPLOADS=()
+        for BUNDLE in "tar.gz:" "msi:" "AppImage:" "deb:-deb"; do
+            FILE="${BASENAME}.${BUNDLE%%:*}"
+            [ -f "${DIST_DIR}/${FILE}.sig" ] || continue
+            # Straight to the bucket, since the API's download route serves one extension per target.
+            UPDATER_ENTRIES+="${TAURI_PLATFORM}${BUNDLE#*:}"$'\t'"${S3_PUBLIC_URL}/${BUCKET_PREFIX}/${FILE}"$'\t'"$(tr -d '\r\n' < "${DIST_DIR}/${FILE}.sig")"$'\n'
+            if [[ " ${ARTIFACTS[*]} " != *" ${FILE} "* ]]; then
+                UPDATER_UPLOADS+=("$FILE")
+            fi
+        done
+
+        if [ -z "$UPDATER_ENTRIES" ]; then
+            echo "⚠️  No updater signatures in ${DIST_DIR} for ${BASENAME}"
+            echo "   Tauri signing keys probably weren't set during build. Skipping."
             echo ""
+        elif [ -z "${S3_PUBLIC_URL:-}" ]; then
+            echo "❌ S3_PUBLIC_URL is required to publish the Tauri updater manifest"
+            exit 1
         else
-            echo "☁️  Uploading updater bundle..."
-            aws s3 cp \
-                "${DIST_DIR}/${UPDATER_TAR}" \
-                "s3://${S3_BUCKET_NAME}/${BUCKET_PREFIX}/${UPDATER_TAR}" \
-                --endpoint-url "$R2_ENDPOINT"
-            echo "✅ ${UPDATER_TAR} uploaded"
+            for FILE in "${UPDATER_UPLOADS[@]}"; do
+                echo "☁️  Uploading updater bundle ${FILE}..."
+                aws s3 cp \
+                    "${DIST_DIR}/${FILE}" \
+                    "s3://${S3_BUCKET_NAME}/${BUCKET_PREFIX}/${FILE}" \
+                    --endpoint-url "$R2_ENDPOINT"
+                # Public, as the in-app updater has no R2 credentials.
+                aws s3api put-object-acl \
+                    --bucket "$S3_BUCKET_NAME" \
+                    --key "${BUCKET_PREFIX}/${FILE}" \
+                    --acl public-read \
+                    --endpoint-url "$R2_ENDPOINT" 2>/dev/null || true
+                echo "✅ ${FILE} uploaded"
+            done
 
-            SIG_CONTENT=$(cat "$UPDATER_SIG_FILE")
-            PUB_DATE_ISO=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-            # Updater bundle URL goes straight to the bucket's public URL, not
-            # through the API download route. The /download route assumes a
-            # single extension per app (DMG for humans); the in-app updater
-            # needs the .tar.gz and the two would collide on the same target
-            # key. Whether these downloads are counted is up to whatever
-            # serves S3_PUBLIC_URL.
-            if [ -z "${S3_PUBLIC_URL:-}" ]; then
-                echo "❌ S3_PUBLIC_URL is required to publish the Tauri updater manifest"
-                exit 1
-            fi
-            DL_URL="${S3_PUBLIC_URL}/${BUCKET_PREFIX}/${UPDATER_TAR}"
-            # Tauri keys platforms by `darwin-aarch64` / `darwin-x86_64` rather
-            # than the Rust triples we use everywhere else; translate so the
-            # client's auto-detected platform string matches.
-            case "$TARGET" in
-                aarch64-apple-darwin) TAURI_TARGET="darwin-aarch64" ;;
-                x86_64-apple-darwin)  TAURI_TARGET="darwin-x86_64" ;;
-                *) TAURI_TARGET="$TARGET" ;;
-            esac
-
-            EXISTING=$(aws s3 cp \
-                "s3://${S3_BUCKET_NAME}/${BUCKET_PREFIX}/${TAURI_MANIFEST_NAME}" - \
-                --endpoint-url "$R2_ENDPOINT" 2>/dev/null || true)
-
-            MANIFEST_FILE=$(mktemp /tmp/tauri_manifest_XXXXXX.json)
-            "$CATAPULT_PYTHON" - "$VERSION" "$PUB_DATE_ISO" "$TAURI_TARGET" "$SIG_CONTENT" "$DL_URL" "$EXISTING" > "$MANIFEST_FILE" <<'PYEOF'
+            # Entries go through stdin, which Git Bash leaves alone where it would rewrite paths and URLs in arguments.
+            printf '%s' "$UPDATER_ENTRIES" | "$CATAPULT_PYTHON" -c '
 import json, sys
-version, pub_date, target, sig, url, existing = sys.argv[1:7]
-try:
-    manifest = json.loads(existing) if existing else {}
-except Exception:
-    manifest = {}
-# A new version invalidates the previous platforms map — never serve a
-# mixed-version manifest. Same version → merge in the new target.
-if manifest.get('version') != version:
-    manifest = {'version': version, 'platforms': {}}
-manifest['pub_date'] = pub_date
-manifest.setdefault('notes', '')
-manifest.setdefault('platforms', {})
-manifest['platforms'][target] = {'signature': sig, 'url': url}
-print(json.dumps(manifest, indent=2))
-PYEOF
-
-            echo "☁️  Uploading ${TAURI_MANIFEST_NAME}..."
-            aws s3 cp "$MANIFEST_FILE" \
-                "s3://${S3_BUCKET_NAME}/${BUCKET_PREFIX}/${TAURI_MANIFEST_NAME}" \
-                --content-type "application/json" \
-                --endpoint-url "$R2_ENDPOINT"
-            rm -f "$MANIFEST_FILE"
-            echo "✅ ${TAURI_MANIFEST_NAME} updated"
-
-            # Public ACL on both — the in-app updater has no R2 creds.
-            aws s3api put-object-acl \
-                --bucket "$S3_BUCKET_NAME" \
-                --key "${BUCKET_PREFIX}/${UPDATER_TAR}" \
-                --acl public-read \
-                --endpoint-url "$R2_ENDPOINT" 2>/dev/null || true
-            aws s3api put-object-acl \
-                --bucket "$S3_BUCKET_NAME" \
-                --key "${BUCKET_PREFIX}/${TAURI_MANIFEST_NAME}" \
-                --acl public-read \
-                --endpoint-url "$R2_ENDPOINT" 2>/dev/null || true
-
-            if [ -n "${CLOUDFLARE_API_TOKEN:-}" ] && [ -n "${CLOUDFLARE_ZONE_ID:-}" ] && [ -n "${S3_PUBLIC_URL:-}" ]; then
-                PURGE=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/purge_cache" \
-                    -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-                    -H "Content-Type: application/json" \
-                    --data "{\"files\":[\"${S3_PUBLIC_URL}/${BUCKET_PREFIX}/${TAURI_MANIFEST_NAME}\"]}")
-                echo "$PURGE" | grep -q '"success":true' && echo "✅ Manifest cache purged" || echo "⚠️  Manifest cache purge failed"
-            fi
+platforms = {}
+for line in sys.stdin.read().splitlines():
+    key, url, signature = line.split("\t")
+    platforms[key] = {"signature": signature, "url": url}
+print(json.dumps({"version": sys.argv[1], "platforms": platforms}, indent=2))
+' "$VERSION" > "$UPDATER_FRAGMENT"
+            echo "✅ ${UPDATER_FRAGMENT##*/} written"
             echo ""
+
+            if [ -n "${CATAPULT_DEFER_UPDATER_MANIFEST:-}" ]; then
+                echo "ℹ️  Leaving ${SLUG}.json to the job that merges every host's fragment"
+                echo ""
+            else
+                "${SCRIPT_DIR}/upload_manifest.sh" "$VERSION" "${UPDATER_FRAGMENT#"${CATAPULT_APP_ROOT}/"}"
+            fi
         fi
     fi
 fi

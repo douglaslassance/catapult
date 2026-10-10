@@ -43,12 +43,9 @@ while [ $# -gt 0 ]; do
     esac
 done
 
+CATAPULT_PLATFORM=android
 source "${SCRIPT_DIR}/config.sh"
 
-if [ "$CATAPULT_BUILD_PLATFORM" != "android" ]; then
-    echo "❌ upload_play.sh requires build.platform = 'android'" >&2
-    exit 1
-fi
 if [ -z "${CATAPULT_HAS_PLAY:-}" ]; then
     echo "❌ [play] section missing from catapult.toml" >&2
     exit 1

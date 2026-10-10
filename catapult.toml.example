@@ -79,6 +79,29 @@ swift_target  = "App"                      # SPM target name; resource bundle is
 # CATAPULT_BUILD_NUMBER is the latest commit's Unix timestamp, the same build
 # number the Apple paths use, which only ever increases as Play requires.
 
+# --- Tauri mobile apps --------------------------------------------------------
+# A Tauri app can ship on iOS and Android from one repo, and release both under
+# one version. `tauri ios build` and `tauri android build` drive the Xcode and
+# Gradle projects Tauri generated under src-tauri/gen, so the Apple and Android
+# fields above do not apply. Set:
+#
+# [build]
+# kind            = "tauri"
+# platforms       = ["ios", "android"]     # instead of platform
+# package_manager = "pnpm"
+# tauri_dir       = "src-tauri"            # default
+# bundle          = "src-tauri/gen/android/app/build/outputs/bundle/universalRelease/app-universal-release.aab"   # default
+#
+# Each platform takes the channel it always takes: [appstore] (plus
+# [testflight]) for iOS and [play] for Android. release.sh builds and publishes
+# them in turn, with the same version and the same build number, which catapult
+# passes to Tauri as the iOS bundleVersion and the Android versionCode.
+#
+# Android signing stays in the generated app/build.gradle.kts, which should read
+# the upload key from a gitignored keystore.properties. The Tauri CLI needs
+# ANDROID_HOME and NDK_HOME; catapult defaults them to Android Studio's SDK
+# folder and its newest NDK.
+
 # --- Optional channels --- presence of each section enables that channel.
 
 [sparkle]                                  # embed Sparkle in direct build + sign DMG

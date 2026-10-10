@@ -51,12 +51,9 @@ while [ $# -gt 0 ]; do
     esac
 done
 
+CATAPULT_PLATFORM=ios
 source "${SCRIPT_DIR}/config.sh"
 
-if [ "$CATAPULT_BUILD_PLATFORM" != "ios" ]; then
-    echo "❌ testflight_ios.sh requires build.platform = 'ios'" >&2
-    exit 1
-fi
 if [ -z "${CATAPULT_HAS_TESTFLIGHT:-}" ]; then
     echo "ℹ️  No [testflight] section in catapult.toml; skipping TestFlight setup."
     exit 0

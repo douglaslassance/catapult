@@ -53,19 +53,34 @@ case "$CATAPULT_BUILD_KIND" in
     *) echo "❌ catapult: build.kind must be 'swift', 'tauri', 'xcodeproj', or 'gradle' (got '$CATAPULT_BUILD_KIND')" >&2; exit 1 ;;
 esac
 
-# Platform: "macos" (default), "ios", or "android". iOS builds go through Xcode,
-# so they require kind = "xcodeproj" and ship only via the appstore channel.
-# Android builds go through Gradle and ship only via the play channel.
-CATAPULT_BUILD_PLATFORM="${CATAPULT_BUILD_PLATFORM:-macos}"
-case "$CATAPULT_BUILD_PLATFORM" in
-    macos|ios|android) ;;
-    *) echo "❌ catapult: build.platform must be 'macos', 'ios', or 'android' (got '$CATAPULT_BUILD_PLATFORM')" >&2; exit 1 ;;
-esac
-if [ "$CATAPULT_BUILD_PLATFORM" = "ios" ] && [ "$CATAPULT_BUILD_KIND" != "xcodeproj" ]; then
-    echo "❌ catapult: build.platform = 'ios' requires build.kind = 'xcodeproj'" >&2; exit 1
+# Platforms: "macos" (default), "ios", or "android". `platform` names one;
+# `platforms` lists several that release together under one version, such as a
+# Tauri mobile app on iOS and Android. A script that serves one platform sets
+# CATAPULT_PLATFORM before sourcing this file, which selects it from the list.
+CATAPULT_BUILD_PLATFORMS="${CATAPULT_BUILD_PLATFORMS:-${CATAPULT_BUILD_PLATFORM:-macos}}"
+for p in $CATAPULT_BUILD_PLATFORMS; do
+    case "$p" in
+        macos|ios|android) ;;
+        *) echo "❌ catapult: build.platform must be 'macos', 'ios', or 'android' (got '$p')" >&2; exit 1 ;;
+    esac
+done
+if [ -n "${CATAPULT_PLATFORM:-}" ]; then
+    case " $CATAPULT_BUILD_PLATFORMS " in
+        *" $CATAPULT_PLATFORM "*) CATAPULT_BUILD_PLATFORM="$CATAPULT_PLATFORM" ;;
+        *) echo "❌ catapult: this app does not ship on '$CATAPULT_PLATFORM' (build.platforms: $CATAPULT_BUILD_PLATFORMS)" >&2; exit 1 ;;
+    esac
+else
+    CATAPULT_BUILD_PLATFORM="${CATAPULT_BUILD_PLATFORMS%% *}"
 fi
-if [ "$CATAPULT_BUILD_PLATFORM" = "android" ] && [ "$CATAPULT_BUILD_KIND" != "gradle" ]; then
-    echo "❌ catapult: build.platform = 'android' requires build.kind = 'gradle'" >&2; exit 1
+
+# iOS builds go through Xcode, either a project of the app's own or the one
+# Tauri generates, and ship only via the appstore channel. Android builds go
+# through Gradle, the same way, and ship only via the play channel.
+if [ "$CATAPULT_BUILD_PLATFORM" = "ios" ] && [ "$CATAPULT_BUILD_KIND" != "xcodeproj" ] && [ "$CATAPULT_BUILD_KIND" != "tauri" ]; then
+    echo "❌ catapult: build.platform = 'ios' requires build.kind = 'xcodeproj' or 'tauri'" >&2; exit 1
+fi
+if [ "$CATAPULT_BUILD_PLATFORM" = "android" ] && [ "$CATAPULT_BUILD_KIND" != "gradle" ] && [ "$CATAPULT_BUILD_KIND" != "tauri" ]; then
+    echo "❌ catapult: build.platform = 'android' requires build.kind = 'gradle' or 'tauri'" >&2; exit 1
 fi
 if [ "$CATAPULT_BUILD_KIND" = "gradle" ] && [ "$CATAPULT_BUILD_PLATFORM" != "android" ]; then
     echo "❌ catapult: build.kind = 'gradle' requires build.platform = 'android'" >&2; exit 1
@@ -78,8 +93,9 @@ if [ "$CATAPULT_BUILD_PLATFORM" != "android" ]; then
 fi
 
 # macOS SPM/Tauri required fields. The Xcode project supplies these itself for
-# xcodeproj builds, so they're only required for the hand-assembled kinds.
-if [ "$CATAPULT_BUILD_KIND" = "swift" ] || [ "$CATAPULT_BUILD_KIND" = "tauri" ]; then
+# xcodeproj builds and Tauri mobile builds, so they're only required for the
+# hand-assembled macOS kinds.
+if [ "$CATAPULT_BUILD_PLATFORM" = "macos" ] && { [ "$CATAPULT_BUILD_KIND" = "swift" ] || [ "$CATAPULT_BUILD_KIND" = "tauri" ]; }; then
     : "${CATAPULT_APP_MIN_MACOS:?app.min_macos required in catapult.toml}"
     : "${CATAPULT_BUILD_ARCH:?build.arch required in catapult.toml}"
     : "${CATAPULT_BUILD_TARGET_TRIPLE:?build.target_triple required in catapult.toml}"
@@ -99,6 +115,11 @@ if [ "$CATAPULT_BUILD_KIND" = "tauri" ]; then
         npm|pnpm|bun|yarn) ;;
         *) echo "❌ catapult: build.package_manager must be npm/pnpm/bun/yarn" >&2; exit 1 ;;
     esac
+    # The Gradle project `tauri android init` generates writes a universal bundle here.
+    if [ "$CATAPULT_BUILD_PLATFORM" = "android" ]; then
+        CATAPULT_BUILD_BUNDLE="${CATAPULT_BUILD_BUNDLE:-${CATAPULT_BUILD_TAURI_DIR}/gen/android/app/build/outputs/bundle/universalRelease/app-universal-release.aab}"
+        export CATAPULT_BUILD_BUNDLE
+    fi
 fi
 
 # xcodeproj fields (iOS today). Drives `xcodebuild archive` / `-exportArchive`.
@@ -153,11 +174,30 @@ esac
 export CATAPULT_BUILD_PROVISIONING_PROFILE
 
 export CATAPULT_BUILD_KIND CATAPULT_BUILD_EXECUTABLE
-export CATAPULT_BUILD_PLATFORM CATAPULT_BUILD_CONFIGURATION
+export CATAPULT_BUILD_PLATFORM CATAPULT_BUILD_PLATFORMS CATAPULT_BUILD_CONFIGURATION
 export CATAPULT_BUILD_ICON CATAPULT_BUILD_ASSETS
 export CATAPULT_BUILD_ICON_COMMAND
 export CATAPULT_BUILD_ENTITLEMENTS_DIRECT CATAPULT_BUILD_ENTITLEMENTS_APPSTORE
 export CATAPULT_BUILD_PACKAGE_MANAGER CATAPULT_BUILD_TAURI_DIR CATAPULT_BUILD_FRONTEND_BUILD
+
+# Runs the app's Tauri CLI through its package manager.
+catapult_tauri() {
+    case "$CATAPULT_BUILD_PACKAGE_MANAGER" in
+        bun)  bun run tauri "$@" ;;
+        pnpm) pnpm tauri "$@" ;;
+        yarn) yarn tauri "$@" ;;
+        npm)  npm run tauri -- "$@" ;;
+    esac
+}
+
+catapult_install_dependencies() {
+    case "$CATAPULT_BUILD_PACKAGE_MANAGER" in
+        bun)  bun install ;;
+        pnpm) pnpm install ;;
+        yarn) yarn install ;;
+        npm)  npm install ;;
+    esac
+}
 
 # Sparkle's `sign_update` prints a whole attribute pair rather than the
 # signature on its own:

@@ -14,7 +14,8 @@ notarize / upload / Homebrew steps; only the build step differs), plus **iOS
 Xcode-project** apps (archived and exported by `xcodebuild`, uploaded to App
 Store Connect — which is what puts a build on TestFlight), plus **Android
 Gradle** apps (bundled and signed by the app's own Gradle build, published to a
-Google Play track).
+Google Play track), plus **Tauri mobile** apps that release on iOS and Android
+together.
 
 Each app picks which channels it ships through via its `catapult.toml`.
 
@@ -81,6 +82,20 @@ Publishing needs a Google Cloud service account invited in Play Console with
 release permission, its JSON key base64-encoded in `PLAY_SERVICE_ACCOUNT_JSON`.
 With `[play] track = "internal"`, testers get the build as soon as the upload
 commits, with release notes from the commit subjects since the previous tag.
+
+### Tauri mobile apps in brief
+
+A Tauri app ships on iOS and Android from one repo with `kind = "tauri"` and
+`platforms = ["ios", "android"]` in `catapult.toml`. `release.sh` then builds
+and publishes both under one version and one build number: `tauri ios build`
+exports the `.ipa` that `upload_ios.sh` and `testflight_ios.sh` take from
+there, and `tauri android build` makes the `.aab` that `upload_play.sh`
+publishes.
+
+```sh
+./catapult/release.sh 1.2.3                     # appstore,play
+./catapult/release.sh 1.2.3 --channels play     # Android only
+```
 
 ## Consuming catapult from an app
 

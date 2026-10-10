@@ -22,10 +22,12 @@ fi
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CATAPULT_PLATFORM=macos
 source "${SCRIPT_DIR}/config.sh"
 
-if [ "$CATAPULT_BUILD_KIND" != "tauri" ]; then
-    echo "❌ build_tauri.sh requires [build] kind = \"tauri\" in catapult.toml"
+if [ "$CATAPULT_BUILD_KIND" != "tauri" ] || [ "$CATAPULT_BUILD_PLATFORM" != "macos" ]; then
+    echo "❌ build_tauri.sh requires [build] kind = \"tauri\" for macOS in catapult.toml"
+    echo "   Tauri iOS and Android apps build with build_ios.sh and build_android.sh."
     exit 1
 fi
 
@@ -48,24 +50,13 @@ mkdir -p "${BUILD_DIR}" "${DIST_DIR}"
 
 # 1. Frontend build (skip if package_manager script handles it via tauri's beforeBuildCommand)
 echo "📦 Installing dependencies..."
-case "$CATAPULT_BUILD_PACKAGE_MANAGER" in
-    bun)  bun install ;;
-    pnpm) pnpm install ;;
-    yarn) yarn install ;;
-    npm)  npm install ;;
-esac
+catapult_install_dependencies
 echo ""
 
 # 2. Tauri build — runs cargo build --release + bundles the .app
 echo "📦 Running tauri build..."
 # Tauri stamps the bundle from tauri.conf.json, so the release version overrides it.
-VERSION_CONFIG="{\"version\":\"${VERSION}\"}"
-case "$CATAPULT_BUILD_PACKAGE_MANAGER" in
-    bun)  bun run tauri build --config "$VERSION_CONFIG" ;;
-    pnpm) pnpm tauri build --config "$VERSION_CONFIG" ;;
-    yarn) yarn tauri build --config "$VERSION_CONFIG" ;;
-    npm)  npm run tauri build -- --config "$VERSION_CONFIG" ;;
-esac
+catapult_tauri build --config "{\"version\":\"${VERSION}\"}"
 echo ""
 
 # 3. Locate the .app Tauri produced. The directory name is the productName

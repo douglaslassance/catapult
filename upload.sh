@@ -1,11 +1,12 @@
 #!/bin/bash
 # upload.sh - Upload DMG (+ Sparkle appcast) to S3-compatible storage, then record the release.
+# Compose desktop builds upload every artifact their host produced (.dmg, .msi, .deb, .AppImage).
 # Requires [s3] section in catapult.toml.
 #
 # Usage: upload.sh [version]
 
 if [[ "$1" == "-h" || "$1" == "--help" ]]; then
-    sed -n '2,5p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,6p' "$0" | sed 's/^# \{0,1\}//'
     exit 0
 fi
 
@@ -27,13 +28,33 @@ SLUG="$CATAPULT_APP_SLUG"
 TARGET="$CATAPULT_BUILD_TARGET_TRIPLE"
 DIST_DIR="$CATAPULT_DIST_DIR"
 DMG_FILE="${SLUG}-${VERSION}-${TARGET}.dmg"
+ARTIFACTS=("$DMG_FILE")
+RELEASE_EXTENSION=".dmg"
 
 BUCKET_PREFIX="${CATAPULT_S3_BUCKET_PREFIX:-$SLUG}"
 APPCAST_FILE_NAME="${CATAPULT_S3_APPCAST_FILENAME:-${SLUG}.xml}"
 # Template uses {version} and {target} placeholders.
 DOWNLOAD_URL_TEMPLATE="${CATAPULT_S3_DOWNLOAD_URL_TEMPLATE:?s3.download_url_template required}"
 
-if [ ! -f "${DIST_DIR}/${DMG_FILE}" ]; then
+# Compose uploads whatever this host built, and its release records the artifact people download here.
+if [ "$CATAPULT_BUILD_KIND" = "compose" ]; then
+    case "$CATAPULT_HOST_OS" in
+        windows) RELEASE_EXTENSION=".msi" ;;
+        linux) RELEASE_EXTENSION=".AppImage" ;;
+    esac
+    if [ ! -f "${DIST_DIR}/${SLUG}-${VERSION}-${TARGET}${RELEASE_EXTENSION}" ]; then
+        echo "❌ ${DIST_DIR}/${SLUG}-${VERSION}-${TARGET}${RELEASE_EXTENSION} not found. Run build.sh first."
+        exit 1
+    fi
+    ARTIFACTS=()
+    for EXT in dmg msi deb AppImage; do
+        if [ -f "${DIST_DIR}/${SLUG}-${VERSION}-${TARGET}.${EXT}" ]; then
+            ARTIFACTS+=("${SLUG}-${VERSION}-${TARGET}.${EXT}")
+        fi
+    done
+fi
+
+if [ "$CATAPULT_BUILD_KIND" != "compose" ] && [ ! -f "${DIST_DIR}/${DMG_FILE}" ]; then
     echo "❌ ${DIST_DIR}/${DMG_FILE} not found — run build.sh first"
     exit 1
 fi
@@ -62,18 +83,24 @@ aws configure set region auto
 
 R2_ENDPOINT="https://${S3_ACCOUNT_ID}.r2.cloudflarestorage.com"
 
-echo "☁️  Uploading DMG..."
-aws s3 cp \
-    "${DIST_DIR}/${DMG_FILE}" \
-    "s3://${S3_BUCKET_NAME}/${BUCKET_PREFIX}/${DMG_FILE}" \
-    --endpoint-url "$R2_ENDPOINT"
-echo "✅ DMG uploaded"
-echo ""
+for FILE in "${ARTIFACTS[@]}"; do
+    case "$CATAPULT_BUILD_KIND" in
+        compose) LABEL="$FILE" ;;
+        *) LABEL="DMG" ;;
+    esac
+    echo "☁️  Uploading ${LABEL}..."
+    aws s3 cp \
+        "${DIST_DIR}/${FILE}" \
+        "s3://${S3_BUCKET_NAME}/${BUCKET_PREFIX}/${FILE}" \
+        --endpoint-url "$R2_ENDPOINT"
+    echo "✅ ${LABEL} uploaded"
+    echo ""
+done
 
 IS_PRERELEASE=$(echo "$VERSION" | grep -qiE '(alpha|beta|rc|pre|dev)' && echo 1 || echo 0)
 
-# Sparkle appcast
-if [ -n "${CATAPULT_HAS_SPARKLE:-}" ]; then
+# Sparkle appcast, which Compose builds never embed
+if [ -n "${CATAPULT_HAS_SPARKLE:-}" ] && [ "$CATAPULT_BUILD_KIND" != "compose" ]; then
     if [ "$IS_PRERELEASE" = "1" ]; then
         echo "⚠️  Skipping appcast update (pre-release: $VERSION)"
         echo ""
@@ -245,11 +272,16 @@ if [ "$IS_PRERELEASE" = "1" ]; then
 elif [ -z "${RELEASE_API_TOKEN:-}" ] || [ -z "${RELEASE_API_URL:-}" ]; then
     echo "⚠️  Skipping release record (RELEASE_API_TOKEN or RELEASE_API_URL not set)"
     echo ""
+elif [ "$CATAPULT_BUILD_KIND" = "compose" ] && [ "$CATAPULT_HOST_OS" != "macos" ]; then
+    # The API keeps the extension the first record of a version sends, so only the Mac leg records and the cask keeps its .dmg.
+    echo "ℹ️  Skipping release record (the macOS build records it)"
+    echo ""
 else
     # The API owns the version comparison, so re-running an older release cannot
     # walk `latest` backwards no matter what this script is invoked with.
     echo "☁️  Recording release..."
-    RELEASE_BODY=$(printf '{"version":"%s","extension":"%s"}' "$VERSION" ".dmg")
+    # The download route serves Windows and Linux targets through the product's per-target extension overrides.
+    RELEASE_BODY=$(printf '{"version":"%s","extension":"%s"}' "$VERSION" "$RELEASE_EXTENSION")
     RELEASE_RESULT=$(curl -s -X PUT "${RELEASE_API_URL%/}/${SLUG}/release" \
         -H "Authorization: Bearer ${RELEASE_API_TOKEN}" \
         -H "Content-Type: application/json" \
@@ -267,19 +299,25 @@ else
 fi
 
 echo "🔓 Setting public access..."
-aws s3api put-object-acl \
-    --bucket "$S3_BUCKET_NAME" \
-    --key "${BUCKET_PREFIX}/${DMG_FILE}" \
-    --acl public-read \
-    --endpoint-url "$R2_ENDPOINT" 2>/dev/null || echo "⚠️  Could not set ACL (may be disabled on bucket)"
+for FILE in "${ARTIFACTS[@]}"; do
+    aws s3api put-object-acl \
+        --bucket "$S3_BUCKET_NAME" \
+        --key "${BUCKET_PREFIX}/${FILE}" \
+        --acl public-read \
+        --endpoint-url "$R2_ENDPOINT" 2>/dev/null || echo "⚠️  Could not set ACL (may be disabled on bucket)"
+done
 echo ""
 
 if [ -n "${CLOUDFLARE_API_TOKEN:-}" ] && [ -n "${CLOUDFLARE_ZONE_ID:-}" ] && [ -n "${S3_PUBLIC_URL:-}" ]; then
     echo "🧹 Purging Cloudflare cache..."
+    PURGE_FILES=""
+    for FILE in "${ARTIFACTS[@]}"; do
+        PURGE_FILES="${PURGE_FILES:+${PURGE_FILES},}\"${S3_PUBLIC_URL}/${BUCKET_PREFIX}/${FILE}\""
+    done
     PURGE=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/purge_cache" \
         -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
         -H "Content-Type: application/json" \
-        --data "{\"files\":[\"${S3_PUBLIC_URL}/${BUCKET_PREFIX}/${DMG_FILE}\"]}")
+        --data "{\"files\":[${PURGE_FILES}]}")
     echo "$PURGE" | grep -q '"success":true' && echo "✅ Cache purged" || echo "⚠️  Cache purge failed"
     echo ""
 fi
@@ -287,4 +325,8 @@ fi
 DOWNLOAD_URL="${DOWNLOAD_URL_TEMPLATE//\{version\}/$VERSION}"
 DOWNLOAD_URL="${DOWNLOAD_URL//\{target\}/$TARGET}"
 echo "✅ Upload complete!"
-echo "📦 DMG: ${DOWNLOAD_URL}"
+if [ "$CATAPULT_BUILD_KIND" = "compose" ]; then
+    echo "📦 Download: ${DOWNLOAD_URL}"
+else
+    echo "📦 DMG: ${DOWNLOAD_URL}"
+fi

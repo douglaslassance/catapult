@@ -102,6 +102,30 @@ swift_target  = "App"                      # SPM target name; resource bundle is
 # ANDROID_HOME and NDK_HOME; catapult defaults them to Android Studio's SDK
 # folder and its newest NDK.
 
+# --- Compose desktop apps -----------------------------------------------------
+# Compose Multiplatform desktop apps build with Gradle and jpackage, which only
+# targets the OS it runs on. Each host makes its own artifacts (a DMG on macOS,
+# an MSI on Windows, a DEB and an AppImage on Linux), and catapult derives the
+# target triple from the host, so leave arch and target_triple unset.
+#
+# [build]
+# kind          = "compose"                # platform defaults to "desktop"
+# gradle_module = "composeApp"             # default
+# icon_assets   = "composeApp/icons/Assets.car"   # optional, macOS adaptive icon
+# linux_icon    = "composeApp/icons/icon.png"     # default, from gradle_module
+#
+# Gradle gets the version as -Papp.version. team_id, developer and min_macos are
+# only required on a Mac, where catapult stamps the version and min_macos into
+# the Info.plist jpackage wrote, merges [plist.extras], [plist.usage_descriptions]
+# and [plist.env] into it, and signs every native (inside jars too) with the
+# entitlements file. An adaptive icon wants CFBundleIconName = "AppIcon" in
+# [plist.extras] next to icon_assets.
+#
+# Every host records the release with its own extension, so the release API
+# needs per-target overrides for the Windows and Linux targets. Homebrew runs
+# only on a Mac, and the MSI is Authenticode signed when WINDOWS_CERTIFICATE is
+# set (see env.example).
+
 # --- Optional channels --- presence of each section enables that channel.
 
 [sparkle]                                  # embed Sparkle in direct build + sign DMG

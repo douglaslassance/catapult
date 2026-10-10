@@ -28,6 +28,15 @@ if [ ! -f "$CATAPULT_CONFIG" ]; then
     exit 1
 fi
 
+# The OS this runs on. Compose desktop builds can only produce artifacts for it.
+case "$(uname -s)" in
+    Darwin) CATAPULT_HOST_OS=macos ;;
+    Linux) CATAPULT_HOST_OS=linux ;;
+    MINGW*|MSYS*|CYGWIN*) CATAPULT_HOST_OS=windows ;;
+    *) CATAPULT_HOST_OS=unknown ;;
+esac
+export CATAPULT_HOST_OS
+
 # Windows runners may only have `python`, so every script uses the interpreter resolved here.
 if [ -z "${CATAPULT_PYTHON:-}" ]; then
     if python3 --version >/dev/null 2>&1; then
@@ -46,12 +55,17 @@ eval "$("$CATAPULT_PYTHON" "${CATAPULT_DIR}/parse_config.py" "$CATAPULT_CONFIG")
 : "${CATAPULT_APP_SLUG:?app.slug required in catapult.toml}"
 : "${CATAPULT_APP_BUNDLE_ID:?app.bundle_id required in catapult.toml}"
 
-# Build kind: "swift" (default), "tauri", "xcodeproj", or "gradle"
+# Build kind: "swift" (default), "tauri", "xcodeproj", "gradle", or "compose"
 CATAPULT_BUILD_KIND="${CATAPULT_BUILD_KIND:-swift}"
 case "$CATAPULT_BUILD_KIND" in
-    swift|tauri|xcodeproj|gradle) ;;
-    *) echo "❌ catapult: build.kind must be 'swift', 'tauri', 'xcodeproj', or 'gradle' (got '$CATAPULT_BUILD_KIND')" >&2; exit 1 ;;
+    swift|tauri|xcodeproj|gradle|compose) ;;
+    *) echo "❌ catapult: build.kind must be 'swift', 'tauri', 'xcodeproj', 'gradle', or 'compose' (got '$CATAPULT_BUILD_KIND')" >&2; exit 1 ;;
 esac
+
+# Compose apps build on macOS, Windows and Linux alike, so their platform is "desktop".
+if [ "$CATAPULT_BUILD_KIND" = "compose" ] && [ -z "${CATAPULT_BUILD_PLATFORMS:-}" ]; then
+    CATAPULT_BUILD_PLATFORM="${CATAPULT_BUILD_PLATFORM:-desktop}"
+fi
 
 # Platforms: "macos" (default), "ios", or "android". `platform` names one;
 # `platforms` lists several that release together under one version, such as a
@@ -60,8 +74,8 @@ esac
 CATAPULT_BUILD_PLATFORMS="${CATAPULT_BUILD_PLATFORMS:-${CATAPULT_BUILD_PLATFORM:-macos}}"
 for p in $CATAPULT_BUILD_PLATFORMS; do
     case "$p" in
-        macos|ios|android) ;;
-        *) echo "❌ catapult: build.platform must be 'macos', 'ios', or 'android' (got '$p')" >&2; exit 1 ;;
+        macos|ios|android|desktop) ;;
+        *) echo "❌ catapult: build.platform must be 'macos', 'ios', 'android', or 'desktop' (got '$p')" >&2; exit 1 ;;
     esac
 done
 if [ -n "${CATAPULT_PLATFORM:-}" ]; then
@@ -85,9 +99,15 @@ fi
 if [ "$CATAPULT_BUILD_KIND" = "gradle" ] && [ "$CATAPULT_BUILD_PLATFORM" != "android" ]; then
     echo "❌ catapult: build.kind = 'gradle' requires build.platform = 'android'" >&2; exit 1
 fi
+if [ "$CATAPULT_BUILD_PLATFORM" = "desktop" ] && [ "$CATAPULT_BUILD_KIND" != "compose" ]; then
+    echo "❌ catapult: build.platform = 'desktop' requires build.kind = 'compose'" >&2; exit 1
+fi
+if [ "$CATAPULT_BUILD_KIND" = "compose" ] && [ "$CATAPULT_BUILD_PLATFORM" != "desktop" ]; then
+    echo "❌ catapult: build.kind = 'compose' requires build.platform = 'desktop'" >&2; exit 1
+fi
 
-# Apple signing identities are derived from these, so only Apple platforms need them.
-if [ "$CATAPULT_BUILD_PLATFORM" != "android" ]; then
+# Apple signing identities are derived from these, so only Apple targets need them (a desktop build is one on a Mac).
+if [ "$CATAPULT_BUILD_PLATFORM" != "android" ] && { [ "$CATAPULT_BUILD_PLATFORM" != "desktop" ] || [ "$CATAPULT_HOST_OS" = "macos" ]; }; then
     : "${CATAPULT_APP_TEAM_ID:?app.team_id required in catapult.toml}"
     : "${CATAPULT_APP_DEVELOPER:?app.developer required in catapult.toml}"
 fi
@@ -138,6 +158,26 @@ if [ "$CATAPULT_BUILD_KIND" = "gradle" ]; then
     CATAPULT_BUILD_TASK="${CATAPULT_BUILD_TASK:-bundleRelease}"
     CATAPULT_BUILD_BUNDLE="${CATAPULT_BUILD_BUNDLE:-${CATAPULT_BUILD_MODULE}/build/outputs/bundle/release/${CATAPULT_BUILD_MODULE}-release.aab}"
     export CATAPULT_BUILD_MODULE CATAPULT_BUILD_TASK CATAPULT_BUILD_BUNDLE
+fi
+
+# compose fields (desktop). jpackage cannot cross-build, so the target triple names the host unless set.
+if [ "$CATAPULT_BUILD_KIND" = "compose" ]; then
+    if [ "$CATAPULT_HOST_OS" = "macos" ]; then
+        : "${CATAPULT_APP_MIN_MACOS:?app.min_macos required in catapult.toml}"
+    fi
+    if [ -z "${CATAPULT_BUILD_TARGET_TRIPLE:-}" ]; then
+        case "${CATAPULT_HOST_OS}/$(uname -m)" in
+            macos/arm64) CATAPULT_BUILD_TARGET_TRIPLE="aarch64-apple-darwin" ;;
+            macos/x86_64) CATAPULT_BUILD_TARGET_TRIPLE="x86_64-apple-darwin" ;;
+            linux/x86_64) CATAPULT_BUILD_TARGET_TRIPLE="x86_64-unknown-linux-gnu" ;;
+            linux/aarch64) CATAPULT_BUILD_TARGET_TRIPLE="aarch64-unknown-linux-gnu" ;;
+            windows/x86_64) CATAPULT_BUILD_TARGET_TRIPLE="x86_64-pc-windows-msvc" ;;
+            *) echo "❌ catapult: cannot derive build.target_triple on $(uname -s) $(uname -m); set it in catapult.toml" >&2; exit 1 ;;
+        esac
+    fi
+    CATAPULT_BUILD_GRADLE_MODULE="${CATAPULT_BUILD_GRADLE_MODULE:-composeApp}"
+    CATAPULT_BUILD_LINUX_ICON="${CATAPULT_BUILD_LINUX_ICON:-${CATAPULT_BUILD_GRADLE_MODULE}/icons/icon.png}"
+    export CATAPULT_BUILD_TARGET_TRIPLE CATAPULT_BUILD_GRADLE_MODULE CATAPULT_BUILD_LINUX_ICON CATAPULT_BUILD_ICON_ASSETS
 fi
 
 # Defaults

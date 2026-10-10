@@ -10,7 +10,8 @@
 # Channels: defaults to "s3,homebrew" on macOS (App Store opt-in), "appstore"
 # on iOS, and "play" on Android. An app that lists several build.platforms
 # releases each of them under the same version, e.g. "appstore,play" for a
-# Tauri app on iOS and Android.
+# Tauri app on iOS and Android. A Compose desktop app also defaults to
+# "s3,homebrew", builds for the host it runs on, and skips homebrew off a Mac.
 #
 # --no-testflight uploads the iOS build but stops short of distributing it, for
 # when you want the build parked in App Store Connect rather than in front of
@@ -21,7 +22,7 @@
 # CD workflow handles certificate import as a prelude step.
 
 if [[ "$1" == "-h" || "$1" == "--help" ]]; then
-    sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'
     exit 0
 fi
 
@@ -105,6 +106,26 @@ release_macos() {
         "${SCRIPT_DIR}/build_appstore.sh" "$VERSION"
         "${SCRIPT_DIR}/verify_appstore.sh"
         "${SCRIPT_DIR}/upload_appstore.sh" "$VERSION"
+    fi
+}
+
+# Desktop (Compose): each host builds and uploads its own artifacts, and only a Mac has the DMG Homebrew wants.
+release_desktop() {
+    if has_channel s3; then
+        "${SCRIPT_DIR}/build.sh" "$VERSION"
+        "${SCRIPT_DIR}/upload.sh" "$VERSION"
+    fi
+
+    if has_channel homebrew; then
+        if [ "$CATAPULT_HOST_OS" = "macos" ]; then
+            "${SCRIPT_DIR}/push_homebrew.sh" --pull-request "$VERSION"
+        else
+            echo "ℹ️  Homebrew ships the macOS DMG; skipping it on ${CATAPULT_HOST_OS}."
+        fi
+    fi
+
+    if has_channel appstore; then
+        echo "ℹ️  Compose desktop apps do not ship to the App Store; ignoring appstore."
     fi
 }
 

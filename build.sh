@@ -15,9 +15,12 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/config.sh"
 
-# Dispatch by build kind. Swift continues below; Tauri delegates.
+# Dispatch by build kind. Swift continues below; Tauri and Compose delegate.
 if [ "$CATAPULT_BUILD_KIND" = "tauri" ]; then
     exec "${SCRIPT_DIR}/build_tauri.sh" "$@"
+fi
+if [ "$CATAPULT_BUILD_KIND" = "compose" ]; then
+    exec "${SCRIPT_DIR}/build_compose.sh" "$@"
 fi
 
 cd "$CATAPULT_APP_ROOT"

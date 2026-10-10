@@ -8,6 +8,7 @@ publishes to:
 - the **Mac App Store** (.pkg via App Store Connect)
 - **iOS TestFlight / App Store** (.ipa via App Store Connect)
 - **Google Play** (.aab via the Google Play Developer API)
+- downloadable **MSI**, **DEB** and **AppImage** builds next to the DMG, for Compose desktop apps
 
 Supports **Swift Package Manager** and **Tauri** macOS apps (sharing the
 notarize / upload / Homebrew steps; only the build step differs), plus **iOS
@@ -15,7 +16,8 @@ Xcode-project** apps (archived and exported by `xcodebuild`, uploaded to App
 Store Connect — which is what puts a build on TestFlight), plus **Android
 Gradle** apps (bundled and signed by the app's own Gradle build, published to a
 Google Play track), plus **Tauri mobile** apps that release on iOS and Android
-together.
+together, plus **Compose Multiplatform desktop** apps built on macOS, Windows
+and Linux.
 
 Each app picks which channels it ships through via its `catapult.toml`.
 
@@ -97,6 +99,39 @@ publishes.
 ./catapult/release.sh 1.2.3 --channels play     # Android only
 ```
 
+### Compose desktop apps in brief
+
+Compose Multiplatform desktop support is `kind = "compose"` in `catapult.toml`,
+whose platform is then `desktop`. jpackage only builds for the OS it runs on,
+so a release runs once per host and each run uploads what that host made.
+
+| Host | Artifacts in `dist/`, each with a `.sha256` |
+|------|---------------------------------------------|
+| macOS | `${slug}-${version}-${target}.dmg`, signed inside out (natives inside jars too), notarized and stapled |
+| Windows | `${slug}-${version}-${target}.msi`, Authenticode signed when `WINDOWS_CERTIFICATE` is set |
+| Linux | `${slug}-${version}-${target}.deb` and `${slug}-${version}-${target}.AppImage` |
+
+```sh
+./catapult/release.sh 1.2.3              # s3 on any host, plus homebrew on a Mac
+```
+
+The app keeps a Gradle wrapper at its root and needs a JDK 17+. catapult runs
+`createDistributable`, `packageMsi` or `packageDeb` on the `composeApp` module
+(`[build] gradle_module` to change it) with `-Papp.version=<version>`. The
+target triple comes from the host, so leave `arch` and `target_triple` unset.
+On a Mac, catapult stamps the real version into the Info.plist (jpackage refuses
+a zero major version), merges `[plist.extras]`, `[plist.usage_descriptions]` and
+`[plist.env]` into it, and copies `[build] icon_assets` in as `Assets.car`. The
+Linux AppImage takes its icon from `[build] linux_icon`, and appimagetool is
+downloaded on first use.
+
+Each host records the release with its own extension (`.dmg`, `.msi` or
+`.AppImage`). The download route serves one extension per target, so the
+Windows and Linux targets need per-target overrides on the product in the
+release API. In GitHub Actions, `platform: desktop` builds on `runner`
+(`macos-15` by default), `windows-latest` and `ubuntu-24.04`, and the Homebrew
+job takes the DMG from the macOS leg.
+
 ## Consuming catapult from an app
 
 Add as a git submodule. The submodule itself is always SHA-pinned by git;
@@ -177,6 +212,7 @@ jobs:
     secrets: inherit
     with:
       channels: "s3,homebrew"   # or "s3,appstore,homebrew"
+      # platform: desktop       # Compose apps, built on macOS, Windows and Linux
 ```
 
 When bumping the submodule SHA, update the `uses:` line to match.
@@ -204,11 +240,13 @@ category    = "public.app-category.productivity"
 min_macos   = "13.0"
 
 [build]
-kind          = "swift"                    # "swift" or "tauri"
+kind          = "swift"                    # "swift", "tauri", "xcodeproj", "gradle" or "compose"
 arch          = "arm64"
 target_triple = "aarch64-apple-darwin"
 swift_target  = "App"                      # SPM target name (swift only)
 # For Tauri: package_manager = "bun" | "pnpm" | "yarn" | "npm"
+# For Compose: gradle_module = "composeApp", icon_assets = "composeApp/icons/Assets.car",
+#              linux_icon = "composeApp/icons/icon.png" (no arch or target_triple)
 
 # Optional sections — presence enables the channel
 [sparkle]
@@ -247,6 +285,7 @@ full annotated schema, including optional overrides.
 | appstore (CI) | `INSTALLER_CERT`, `INSTALLER_CERT_PASSWORD` | Mac Installer Distribution cert |
 | appstore (CI) | `PROVISIONING_PROFILE_B64` | base64 .provisionprofile |
 | play    | `PLAY_SERVICE_ACCOUNT_JSON` | Google Play service account key (base64 JSON) |
+| s3 (Compose on Windows) | `WINDOWS_CERTIFICATE`, `WINDOWS_CERTIFICATE_PASSWORD` | optional: Authenticode certificate (base64 .pfx) that signs the MSI |
 
 For local builds: `APPSTORE_CERT` / `INSTALLER_CERT` / provisioning profile
 should already be in your keychain and `~/Library/MobileDevice/Provisioning Profiles/`.
@@ -257,3 +296,6 @@ should already be in your keychain and `~/Library/MobileDevice/Provisioning Prof
 - Python 3.11+ (`brew install python@3.12` if your system Python is older)
 - For uploads: `awscli`, `gh`, `brew` (auto-installed by scripts when missing)
 - For Android: a JDK (Gradle and `jarsigner`) and `openssl`
+- For Compose desktop apps: a JDK 17+ on every host, Git Bash and the Windows
+  SDK's `signtool` on Windows (where `python` will do for Python), and `curl`
+  on Linux to fetch appimagetool

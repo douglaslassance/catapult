@@ -14,7 +14,7 @@ source "${SCRIPT_DIR}/config.sh"
 
 cd "$CATAPULT_APP_ROOT"
 
-VERSION="${1:-$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")}"
+VERSION="$(catapult_version "${1:-}" 0.0.0)"
 SLUG="$CATAPULT_APP_SLUG"
 DIST_DIR="$CATAPULT_DIST_DIR"
 PKG_NAME="${SLUG}-${VERSION}.pkg"

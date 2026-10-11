@@ -196,6 +196,9 @@ CATAPULT_BUILD_PROVISIONING_PROFILE="${CATAPULT_BUILD_PROVISIONING_PROFILE:-${CA
 # compiled binary name differs (e.g. trotter has APP_NAME=Trotter but the
 # binary in .build/release is "trotter").
 CATAPULT_BUILD_EXECUTABLE="${CATAPULT_BUILD_EXECUTABLE:-${CATAPULT_APP_NAME}}"
+# Release tags are "<tag_prefix><version>", so several apps can release from one
+# repo (e.g. "desktop-1.2.0" and "mobile-1.0.0"). Empty means bare version tags.
+CATAPULT_APP_TAG_PREFIX="${CATAPULT_APP_TAG_PREFIX:-}"
 
 # Derived identities
 export CATAPULT_APP_SIGNING_IDENTITY_APPSTORE="Apple Distribution: ${CATAPULT_APP_DEVELOPER} (${CATAPULT_APP_TEAM_ID})"
@@ -219,7 +222,7 @@ case "$CATAPULT_BUILD_PROVISIONING_PROFILE" in
 esac
 export CATAPULT_BUILD_PROVISIONING_PROFILE
 
-export CATAPULT_BUILD_KIND CATAPULT_BUILD_EXECUTABLE
+export CATAPULT_BUILD_KIND CATAPULT_BUILD_EXECUTABLE CATAPULT_APP_TAG_PREFIX
 export CATAPULT_BUILD_PLATFORM CATAPULT_BUILD_PLATFORMS CATAPULT_BUILD_CONFIGURATION
 export CATAPULT_BUILD_ICON CATAPULT_BUILD_ASSETS
 export CATAPULT_BUILD_ICON_COMMAND
@@ -289,6 +292,29 @@ catapult_sign_msi() {
     rm -rf "$pfx_dir"
     echo "✅ Signed"
     echo ""
+}
+
+# The latest of this app's release tags reachable from a revision (HEAD by
+# default). Fails when there is none.
+catapult_latest_tag() {
+    if [ -n "$CATAPULT_APP_TAG_PREFIX" ]; then
+        git describe --tags --abbrev=0 --match "${CATAPULT_APP_TAG_PREFIX}[0-9]*" "$@" 2>/dev/null
+    else
+        git describe --tags --abbrev=0 "$@" 2>/dev/null
+    fi
+}
+
+# The version to release: the one given (a version or a full tag), else the
+# latest tag's, else the fallback. Always without the tag prefix.
+#
+#   VERSION="$(catapult_version "${1:-}" 0.0.0)"
+catapult_version() {
+    local version="${1:-}"
+    if [ -z "$version" ]; then
+        version="$(catapult_latest_tag || true)"
+    fi
+    version="${version#"$CATAPULT_APP_TAG_PREFIX"}"
+    printf '%s' "${version:-${2:-}}"
 }
 
 # Sparkle's `sign_update` prints a whole attribute pair rather than the

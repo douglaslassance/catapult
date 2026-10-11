@@ -115,10 +115,9 @@ jobs:
         run: |
           V="${{ inputs.version }}"
           if [ -z "$V" ]; then
+            # Otherwise release.sh picks the latest of this app's tags.
             if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
               V="${GITHUB_REF#refs/tags/}"
-            else
-              V="$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.0)"
             fi
           fi
           echo "version=$V" >> "$GITHUB_OUTPUT"
@@ -197,10 +196,9 @@ jobs:
         run: |
           V="${{ inputs.version }}"
           if [ -z "$V" ]; then
+            # Otherwise release.sh picks the latest of this app's tags.
             if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
               V="${GITHUB_REF#refs/tags/}"
-            else
-              V="$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.0)"
             fi
           fi
           echo "version=$V" >> "$GITHUB_OUTPUT"
@@ -325,10 +323,9 @@ jobs:
         run: |
           V="${{ inputs.version }}"
           if [ -z "$V" ]; then
+            # Otherwise release.sh picks the latest of this app's tags.
             if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
               V="${GITHUB_REF#refs/tags/}"
-            else
-              V="$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.0)"
             fi
           fi
           echo "version=$V" >> "$GITHUB_OUTPUT"
@@ -375,10 +372,9 @@ jobs:
         run: |
           V="${{ inputs.version }}"
           if [ -z "$V" ]; then
+            # Otherwise release.sh picks the latest of this app's tags.
             if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
               V="${GITHUB_REF#refs/tags/}"
-            else
-              V="$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.0)"
             fi
           fi
           echo "version=$V" >> "$GITHUB_OUTPUT"
@@ -403,10 +399,9 @@ jobs:
         run: |
           V="${{ inputs.version }}"
           if [ -z "$V" ]; then
+            # Otherwise release.sh picks the latest of this app's tags.
             if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
               V="${GITHUB_REF#refs/tags/}"
-            else
-              V="$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.0)"
             fi
           fi
           echo "version=$V" >> "$GITHUB_OUTPUT"
@@ -464,10 +459,9 @@ jobs:
         run: |
           V="${{ inputs.version }}"
           if [ -z "$V" ]; then
+            # Otherwise release.sh picks the latest of this app's tags.
             if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
               V="${GITHUB_REF#refs/tags/}"
-            else
-              V="$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.0)"
             fi
           fi
           echo "version=$V" >> "$GITHUB_OUTPUT"

@@ -1,0 +1,137 @@
+# Checks catapult's own code on every pull request. Apps still bring their own ci.yml.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Pinned so a new linter release cannot turn main red on its own.
+      - name: Install the linters
+        id: install
+        env:
+          SHELLCHECK_VERSION: 0.11.0
+          SHFMT_VERSION: 3.10.0
+          ACTIONLINT_VERSION: 1.7.7
+          RUFF_VERSION: 0.16.8
+        run: |
+          bin="${RUNNER_TEMP}/bin"
+          mkdir -p "$bin"
+          curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" |
+            tar -xJ --strip-components=1 -C "$bin" "shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
+          curl -fsSL -o "${bin}/shfmt" "https://github.com/mvdan/sh/releases/download/v${SHFMT_VERSION}/shfmt_v${SHFMT_VERSION}_linux_amd64"
+          chmod +x "${bin}/shfmt"
+          curl -fsSL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" |
+            tar -xz -C "$bin" actionlint
+          pip install --quiet "ruff==${RUFF_VERSION}"
+          echo "$bin" >> "$GITHUB_PATH"
+
+      # Each check runs even when an earlier one failed, so one push reports everything.
+      - name: shellcheck
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: shellcheck -x ./*.sh
+
+      - name: shfmt
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: shfmt --diff ./*.sh
+
+      - name: ruff check
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: ruff check --output-format=github .
+
+      - name: ruff format
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: ruff format --check --diff .
+
+      - name: actionlint
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: actionlint
+
+  smoke:
+    name: Smoke test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # The oldest Python catapult supports, since tomllib arrived in 3.11.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Load the example config
+        run: |
+          app="$(mktemp -d)"
+          cp catapult.toml.example "${app}/catapult.toml"
+          cd "$app"
+          bash -c 'source "$1/config.sh" && echo "${CATAPULT_APP_NAME}: ${CATAPULT_BUILD_KIND} on ${CATAPULT_BUILD_PLATFORM}"' _ "$GITHUB_WORKSPACE"
+
+      - name: Render the example Info.plists
+        env:
+          SPARKLE_PUBLIC_KEY: example
+        run: |
+          for kind in direct appstore; do
+            python render_plist.py catapult.toml.example --kind "$kind" --version 1.2.3 > "${RUNNER_TEMP}/${kind}.plist"
+            python -c 'import plistlib, sys; plistlib.load(open(sys.argv[1], "rb"))' "${RUNNER_TEMP}/${kind}.plist"
+            echo "${kind}: valid plist"
+          done
+
+      - name: Pick a target from a config with several
+        run: |
+          app="$(mktemp -d)"
+          mkdir "${app}/desktop" "${app}/mobile"
+          cat > "${app}/catapult.toml" <<'TOML'
+          [app]
+          name      = "MyApp"
+          slug      = "myapp"
+          bundle_id = "com.example.myapp"
+          team_id   = "ABCDE12345"
+          developer = "Example Developer"
+          min_macos = "13.0"
+
+          [targets.desktop.app]
+          path       = "desktop"
+          tag_prefix = "desktop-"
+
+          [targets.desktop.build]
+          arch          = "arm64"
+          target_triple = "aarch64-apple-darwin"
+          swift_target  = "App"
+
+          [targets.mobile.app]
+          path       = "mobile"
+          tag_prefix = "mobile-"
+
+          [targets.mobile.build]
+          kind     = "xcodeproj"
+          platform = "ios"
+          scheme   = "MyApp"
+          project  = "MyApp.xcodeproj"
+          TOML
+          cd "$app"
+          # shellcheck disable=SC2016 # expanded by the bash that sources config.sh
+          load='source "$1/config.sh" && echo "${CATAPULT_TARGET}: ${CATAPULT_BUILD_KIND} on ${CATAPULT_BUILD_PLATFORM} in ${PWD##*/}"'
+          [ "$(CATAPULT_TARGET=desktop bash -c "$load" _ "$GITHUB_WORKSPACE")" = "desktop: swift on macos in desktop" ]
+          [ "$(CATAPULT_TARGET=mobile bash -c "$load" _ "$GITHUB_WORKSPACE")" = "mobile: xcodeproj on ios in mobile" ]
+          if bash -c "$load" _ "$GITHUB_WORKSPACE" 2>/dev/null; then
+            echo "A config with several targets loaded without one being picked"
+            exit 1
+          fi
+          echo "Targets resolve, and a missing one is refused"

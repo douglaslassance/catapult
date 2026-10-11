@@ -467,9 +467,11 @@ jobs:
     name: Build + upload (iOS App Store / TestFlight)
     runs-on: ${{ inputs.runner }}
     steps:
+      # TestFlight's What to Test lists the commits since the previous tag.
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+          fetch-depth: 0
 
       - name: Resolve version
         id: ver
@@ -482,6 +484,34 @@ jobs:
             fi
           fi
           echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      - name: Read the config
+        id: cfg
+        run: |
+          eval "$(python3 catapult/parse_config.py catapult.toml)"
+          {
+            echo "kind=${CATAPULT_BUILD_KIND:-swift}"
+            echo "package_manager=${CATAPULT_BUILD_PACKAGE_MANAGER:-npm}"
+            echo "pregenerate=${CATAPULT_BUILD_PREGENERATE:-}"
+          } >>"$GITHUB_OUTPUT"
+
+      - name: Install XcodeGen
+        if: contains(steps.cfg.outputs.pregenerate, 'xcodegen')
+        run: command -v xcodegen >/dev/null || brew install xcodegen
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: 1
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.cfg.outputs.kind == 'tauri'
+        with:
+          targets: aarch64-apple-ios
+
+      - uses: oven-sh/setup-bun@v2
+        if: steps.cfg.outputs.kind == 'tauri' && steps.cfg.outputs.package_manager == 'bun'
+
+      - name: Enable pnpm and yarn
+        if: steps.cfg.outputs.kind == 'tauri' && (steps.cfg.outputs.package_manager == 'pnpm' || steps.cfg.outputs.package_manager == 'yarn')
+        run: corepack enable
 
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer

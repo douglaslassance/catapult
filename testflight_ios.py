@@ -54,7 +54,7 @@ def load_private_key() -> str:
         try:
             return base64.b64decode(raw).decode()
         except Exception as e:
-            raise ASCError(f"NOTARIZATION_KEY is neither PEM nor base64 PEM: {e}")
+            raise ASCError(f"NOTARIZATION_KEY is neither PEM nor base64 PEM: {e}") from None
     path = os.path.expanduser(f"~/.appstoreconnect/private_keys/AuthKey_{key_id}.p8")
     if os.path.exists(path):
         with open(path) as f:

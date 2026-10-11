@@ -55,7 +55,7 @@ def load_service_account() -> dict:
         text = raw if raw.startswith("{") else base64.b64decode(raw).decode()
         account = json.loads(text)
     except Exception as e:
-        raise PlayError(f"PLAY_SERVICE_ACCOUNT_JSON is neither JSON nor base64 JSON: {e}")
+        raise PlayError(f"PLAY_SERVICE_ACCOUNT_JSON is neither JSON nor base64 JSON: {e}") from None
     for field in ("client_email", "private_key"):
         if not account.get(field):
             raise PlayError(f"Service account JSON has no {field}")
@@ -114,7 +114,9 @@ def access_token(account: dict) -> str:
         with urllib.request.urlopen(request, timeout=60) as response:
             return json.load(response)["access_token"]
     except urllib.error.HTTPError as e:
-        raise PlayError(f"Google rejected the service account: {e.read().decode(errors='replace')}")
+        raise PlayError(
+            f"Google rejected the service account: {e.read().decode(errors='replace')}"
+        ) from None
 
 
 def call(
@@ -143,7 +145,9 @@ def call(
             detail = json.loads(detail)["error"]["message"]
         except Exception:
             pass
-        raise PlayError(f"{method} {url.split('/applications/')[-1]} -> HTTP {e.code}: {detail}")
+        raise PlayError(
+            f"{method} {url.split('/applications/')[-1]} -> HTTP {e.code}: {detail}"
+        ) from None
 
 
 def release_notes(path: str) -> str:

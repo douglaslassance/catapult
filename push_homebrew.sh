@@ -51,7 +51,7 @@ fi
 
 HOMEBREW_TAP_URL="${HOMEBREW_TAP_URL:-https://github.com/Homebrew/homebrew-cask.git}"
 HOMEBREW_REPO=$(echo "$HOMEBREW_TAP_URL" | sed 's|https://github.com/||' | sed 's|\.git$||')
-TAP_NAME=$(echo "$HOMEBREW_REPO" | sed 's|/homebrew-|/|')
+TAP_NAME="${HOMEBREW_REPO/\/homebrew-//}"
 CASK_FILE="Casks/${BREW_NAME:0:1}/${BREW_NAME}.rb"
 
 VERSION="$(catapult_version "${ARGS[0]:-}")"
@@ -130,7 +130,7 @@ cleanup() {
 trap cleanup EXIT
 
 echo "🧪 Testing cask..."
-rm -f ~/Library/Caches/Homebrew/downloads/*${APP_NAME}*
+rm -f ~/Library/Caches/Homebrew/downloads/*"${APP_NAME}"*
 # Remembered so cleanup can restore it; the tap is repointed at the temp clone so
 # audit and fetch test the cask about to be proposed, not the published one.
 PREVIOUS_TAP_URL=$(git -C "$(brew --repository "$TAP_NAME" 2>/dev/null)" remote get-url origin 2>/dev/null || echo "")
@@ -144,6 +144,7 @@ if ! git diff --quiet "$CASK_FILE"; then
     git commit --amend --no-edit
 fi
 
+# shellcheck disable=SC2086 # AUDIT_FLAGS holds several flags
 brew audit ${AUDIT_FLAGS:-} "$TAP_CASK"
 # fetch rather than install: this downloads the artifact and verifies its checksum,
 # which is what varies per release, without replacing the app on the machine cutting

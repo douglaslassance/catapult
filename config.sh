@@ -28,6 +28,7 @@ CATAPULT_CONFIG_DIR="$(dirname "$CATAPULT_CONFIG")"
 # render_plist.py) see the values.
 if [ -f "${CATAPULT_CONFIG_DIR}/.env" ]; then
     set -a
+    # shellcheck source=/dev/null
     source "${CATAPULT_CONFIG_DIR}/.env"
     set +a
 fi
@@ -413,6 +414,7 @@ catapult_sign_msi() {
 
 # The latest of this app's release tags reachable from a revision (HEAD by
 # default). Fails when there is none.
+# shellcheck disable=SC2120 # testflight_ios.sh and upload_play.sh pass a revision
 catapult_latest_tag() {
     if [ -n "$CATAPULT_APP_TAG_PREFIX" ]; then
         git describe --tags --abbrev=0 --match "${CATAPULT_APP_TAG_PREFIX}[0-9]*" "$@" 2>/dev/null

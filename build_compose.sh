@@ -78,6 +78,8 @@ sign_jar_natives() {
 sign_app() {
     local app="$1" file
     # Finder or quarantine attributes on any file make codesign refuse the bundle.
+    # The runtime ships its legal files read-only, and clearing attributes needs write access.
+    chmod -R u+w "$app"
     xattr -cr "$app"
 
     echo "🔏 Signing natives inside jars..."

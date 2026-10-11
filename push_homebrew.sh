@@ -166,16 +166,16 @@ echo ""
 if [ "$PULL_REQUEST" = true ]; then
     echo "📬 Creating pull request..."
     REPO_INFO=$(gh repo view "$HOMEBREW_REPO" --json isFork,parent,defaultBranchRef 2>/dev/null)
-    IS_FORK=$(echo "$REPO_INFO" | python3 -c "import json,sys; print(json.load(sys.stdin).get('isFork', False))")
+    IS_FORK=$(echo "$REPO_INFO" | "$CATAPULT_PYTHON" -c "import json,sys; print(json.load(sys.stdin).get('isFork', False))")
 
     if [ "$IS_FORK" = "True" ]; then
-        PARENT_SLUG=$(echo "$REPO_INFO" | python3 -c "import json,sys; print(json.load(sys.stdin)['parent']['nameWithOwner'])")
+        PARENT_SLUG=$(echo "$REPO_INFO" | "$CATAPULT_PYTHON" -c "import json,sys; print(json.load(sys.stdin)['parent']['nameWithOwner'])")
         PR_BASE=$(gh repo view "$PARENT_SLUG" --json defaultBranchRef -q '.defaultBranchRef.name')
         OWNER=$(echo "$HOMEBREW_REPO" | cut -d/ -f1)
         PR_REPO="$PARENT_SLUG"
         PR_HEAD="${OWNER}:${BRANCH}"
     else
-        PR_BASE=$(echo "$REPO_INFO" | python3 -c "import json,sys; print(json.load(sys.stdin)['defaultBranchRef']['name'])")
+        PR_BASE=$(echo "$REPO_INFO" | "$CATAPULT_PYTHON" -c "import json,sys; print(json.load(sys.stdin)['defaultBranchRef']['name'])")
         PR_REPO="$HOMEBREW_REPO"
         PR_HEAD="$BRANCH"
     fi

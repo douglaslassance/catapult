@@ -28,48 +28,95 @@ if [ ! -f "$CATAPULT_CONFIG" ]; then
     exit 1
 fi
 
+# The OS this runs on. Desktop builds can only produce artifacts for it.
+case "$(uname -s)" in
+    Darwin) CATAPULT_HOST_OS=macos ;;
+    Linux) CATAPULT_HOST_OS=linux ;;
+    MINGW*|MSYS*|CYGWIN*) CATAPULT_HOST_OS=windows ;;
+    *) CATAPULT_HOST_OS=unknown ;;
+esac
+export CATAPULT_HOST_OS
+
+# Windows runners may only have `python`, so every script uses the interpreter resolved here.
+if [ -z "${CATAPULT_PYTHON:-}" ]; then
+    if python3 --version >/dev/null 2>&1; then
+        CATAPULT_PYTHON=python3
+    else
+        CATAPULT_PYTHON=python
+    fi
+fi
+export CATAPULT_PYTHON
+
 # Load TOML into env
-eval "$(python3 "${CATAPULT_DIR}/parse_config.py" "$CATAPULT_CONFIG")"
+eval "$("$CATAPULT_PYTHON" "${CATAPULT_DIR}/parse_config.py" "$CATAPULT_CONFIG")"
 
 # Required for any kind/platform. On Android, bundle_id is the applicationId.
 : "${CATAPULT_APP_NAME:?app.name required in catapult.toml}"
 : "${CATAPULT_APP_SLUG:?app.slug required in catapult.toml}"
 : "${CATAPULT_APP_BUNDLE_ID:?app.bundle_id required in catapult.toml}"
 
-# Build kind: "swift" (default), "tauri", "xcodeproj", or "gradle"
+# Build kind: "swift" (default), "tauri", "xcodeproj", "gradle", or "compose"
 CATAPULT_BUILD_KIND="${CATAPULT_BUILD_KIND:-swift}"
 case "$CATAPULT_BUILD_KIND" in
-    swift|tauri|xcodeproj|gradle) ;;
-    *) echo "❌ catapult: build.kind must be 'swift', 'tauri', 'xcodeproj', or 'gradle' (got '$CATAPULT_BUILD_KIND')" >&2; exit 1 ;;
+    swift|tauri|xcodeproj|gradle|compose) ;;
+    *) echo "❌ catapult: build.kind must be 'swift', 'tauri', 'xcodeproj', 'gradle', or 'compose' (got '$CATAPULT_BUILD_KIND')" >&2; exit 1 ;;
 esac
 
-# Platform: "macos" (default), "ios", or "android". iOS builds go through Xcode,
-# so they require kind = "xcodeproj" and ship only via the appstore channel.
-# Android builds go through Gradle and ship only via the play channel.
-CATAPULT_BUILD_PLATFORM="${CATAPULT_BUILD_PLATFORM:-macos}"
-case "$CATAPULT_BUILD_PLATFORM" in
-    macos|ios|android) ;;
-    *) echo "❌ catapult: build.platform must be 'macos', 'ios', or 'android' (got '$CATAPULT_BUILD_PLATFORM')" >&2; exit 1 ;;
-esac
-if [ "$CATAPULT_BUILD_PLATFORM" = "ios" ] && [ "$CATAPULT_BUILD_KIND" != "xcodeproj" ]; then
-    echo "❌ catapult: build.platform = 'ios' requires build.kind = 'xcodeproj'" >&2; exit 1
+# Compose apps build on macOS, Windows and Linux alike, so their platform is "desktop".
+if [ "$CATAPULT_BUILD_KIND" = "compose" ] && [ -z "${CATAPULT_BUILD_PLATFORMS:-}" ]; then
+    CATAPULT_BUILD_PLATFORM="${CATAPULT_BUILD_PLATFORM:-desktop}"
 fi
-if [ "$CATAPULT_BUILD_PLATFORM" = "android" ] && [ "$CATAPULT_BUILD_KIND" != "gradle" ]; then
-    echo "❌ catapult: build.platform = 'android' requires build.kind = 'gradle'" >&2; exit 1
+
+# Platforms: "macos" (default), "ios", or "android". `platform` names one;
+# `platforms` lists several that release together under one version, such as a
+# Tauri mobile app on iOS and Android. A script that serves one platform sets
+# CATAPULT_PLATFORM before sourcing this file, which selects it from the list.
+CATAPULT_BUILD_PLATFORMS="${CATAPULT_BUILD_PLATFORMS:-${CATAPULT_BUILD_PLATFORM:-macos}}"
+for p in $CATAPULT_BUILD_PLATFORMS; do
+    case "$p" in
+        macos|ios|android|desktop) ;;
+        *) echo "❌ catapult: build.platform must be 'macos', 'ios', 'android', or 'desktop' (got '$p')" >&2; exit 1 ;;
+    esac
+done
+if [ -n "${CATAPULT_PLATFORM:-}" ]; then
+    case " $CATAPULT_BUILD_PLATFORMS " in
+        *" $CATAPULT_PLATFORM "*) CATAPULT_BUILD_PLATFORM="$CATAPULT_PLATFORM" ;;
+        *) echo "❌ catapult: this app does not ship on '$CATAPULT_PLATFORM' (build.platforms: $CATAPULT_BUILD_PLATFORMS)" >&2; exit 1 ;;
+    esac
+else
+    CATAPULT_BUILD_PLATFORM="${CATAPULT_BUILD_PLATFORMS%% *}"
+fi
+
+# iOS builds go through Xcode, either a project of the app's own or the one
+# Tauri generates, and ship only via the appstore channel. Android builds go
+# through Gradle, the same way, and ship only via the play channel.
+if [ "$CATAPULT_BUILD_PLATFORM" = "ios" ] && [ "$CATAPULT_BUILD_KIND" != "xcodeproj" ] && [ "$CATAPULT_BUILD_KIND" != "tauri" ]; then
+    echo "❌ catapult: build.platform = 'ios' requires build.kind = 'xcodeproj' or 'tauri'" >&2; exit 1
+fi
+if [ "$CATAPULT_BUILD_PLATFORM" = "android" ] && [ "$CATAPULT_BUILD_KIND" != "gradle" ] && [ "$CATAPULT_BUILD_KIND" != "tauri" ]; then
+    echo "❌ catapult: build.platform = 'android' requires build.kind = 'gradle' or 'tauri'" >&2; exit 1
 fi
 if [ "$CATAPULT_BUILD_KIND" = "gradle" ] && [ "$CATAPULT_BUILD_PLATFORM" != "android" ]; then
     echo "❌ catapult: build.kind = 'gradle' requires build.platform = 'android'" >&2; exit 1
 fi
+# Desktop builds run once per host (macOS, Windows and Linux). Compose always does, Tauri opts in.
+if [ "$CATAPULT_BUILD_PLATFORM" = "desktop" ] && [ "$CATAPULT_BUILD_KIND" != "compose" ] && [ "$CATAPULT_BUILD_KIND" != "tauri" ]; then
+    echo "❌ catapult: build.platform = 'desktop' requires build.kind = 'compose' or 'tauri'" >&2; exit 1
+fi
+if [ "$CATAPULT_BUILD_KIND" = "compose" ] && [ "$CATAPULT_BUILD_PLATFORM" != "desktop" ]; then
+    echo "❌ catapult: build.kind = 'compose' requires build.platform = 'desktop'" >&2; exit 1
+fi
 
-# Apple signing identities are derived from these, so only Apple platforms need them.
-if [ "$CATAPULT_BUILD_PLATFORM" != "android" ]; then
+# Apple signing identities are derived from these, so only Apple targets need them (a desktop build is one on a Mac).
+if [ "$CATAPULT_BUILD_PLATFORM" != "android" ] && { [ "$CATAPULT_BUILD_PLATFORM" != "desktop" ] || [ "$CATAPULT_HOST_OS" = "macos" ]; }; then
     : "${CATAPULT_APP_TEAM_ID:?app.team_id required in catapult.toml}"
     : "${CATAPULT_APP_DEVELOPER:?app.developer required in catapult.toml}"
 fi
 
 # macOS SPM/Tauri required fields. The Xcode project supplies these itself for
-# xcodeproj builds, so they're only required for the hand-assembled kinds.
-if [ "$CATAPULT_BUILD_KIND" = "swift" ] || [ "$CATAPULT_BUILD_KIND" = "tauri" ]; then
+# xcodeproj builds and Tauri mobile builds, so they're only required for the
+# hand-assembled macOS kinds.
+if [ "$CATAPULT_BUILD_PLATFORM" = "macos" ] && { [ "$CATAPULT_BUILD_KIND" = "swift" ] || [ "$CATAPULT_BUILD_KIND" = "tauri" ]; }; then
     : "${CATAPULT_APP_MIN_MACOS:?app.min_macos required in catapult.toml}"
     : "${CATAPULT_BUILD_ARCH:?build.arch required in catapult.toml}"
     : "${CATAPULT_BUILD_TARGET_TRIPLE:?build.target_triple required in catapult.toml}"
@@ -89,6 +136,11 @@ if [ "$CATAPULT_BUILD_KIND" = "tauri" ]; then
         npm|pnpm|bun|yarn) ;;
         *) echo "❌ catapult: build.package_manager must be npm/pnpm/bun/yarn" >&2; exit 1 ;;
     esac
+    # The Gradle project `tauri android init` generates writes a universal bundle here.
+    if [ "$CATAPULT_BUILD_PLATFORM" = "android" ]; then
+        CATAPULT_BUILD_BUNDLE="${CATAPULT_BUILD_BUNDLE:-${CATAPULT_BUILD_TAURI_DIR}/gen/android/app/build/outputs/bundle/universalRelease/app-universal-release.aab}"
+        export CATAPULT_BUILD_BUNDLE
+    fi
 fi
 
 # xcodeproj fields (iOS today). Drives `xcodebuild archive` / `-exportArchive`.
@@ -107,6 +159,31 @@ if [ "$CATAPULT_BUILD_KIND" = "gradle" ]; then
     CATAPULT_BUILD_TASK="${CATAPULT_BUILD_TASK:-bundleRelease}"
     CATAPULT_BUILD_BUNDLE="${CATAPULT_BUILD_BUNDLE:-${CATAPULT_BUILD_MODULE}/build/outputs/bundle/release/${CATAPULT_BUILD_MODULE}-release.aab}"
     export CATAPULT_BUILD_MODULE CATAPULT_BUILD_TASK CATAPULT_BUILD_BUNDLE
+fi
+
+# Desktop fields. Neither jpackage nor a Tauri bundle cross-builds, so the target triple names the host unless set.
+if [ "$CATAPULT_BUILD_PLATFORM" = "desktop" ]; then
+    if [ "$CATAPULT_HOST_OS" = "macos" ]; then
+        : "${CATAPULT_APP_MIN_MACOS:?app.min_macos required in catapult.toml}"
+    fi
+    if [ -z "${CATAPULT_BUILD_TARGET_TRIPLE:-}" ]; then
+        case "${CATAPULT_HOST_OS}/$(uname -m)" in
+            macos/arm64) CATAPULT_BUILD_TARGET_TRIPLE="aarch64-apple-darwin" ;;
+            macos/x86_64) CATAPULT_BUILD_TARGET_TRIPLE="x86_64-apple-darwin" ;;
+            linux/x86_64) CATAPULT_BUILD_TARGET_TRIPLE="x86_64-unknown-linux-gnu" ;;
+            linux/aarch64) CATAPULT_BUILD_TARGET_TRIPLE="aarch64-unknown-linux-gnu" ;;
+            windows/x86_64) CATAPULT_BUILD_TARGET_TRIPLE="x86_64-pc-windows-msvc" ;;
+            *) echo "❌ catapult: cannot derive build.target_triple on $(uname -s) $(uname -m); set it in catapult.toml" >&2; exit 1 ;;
+        esac
+    fi
+    export CATAPULT_BUILD_TARGET_TRIPLE
+fi
+
+# compose fields
+if [ "$CATAPULT_BUILD_KIND" = "compose" ]; then
+    CATAPULT_BUILD_GRADLE_MODULE="${CATAPULT_BUILD_GRADLE_MODULE:-composeApp}"
+    CATAPULT_BUILD_LINUX_ICON="${CATAPULT_BUILD_LINUX_ICON:-${CATAPULT_BUILD_GRADLE_MODULE}/icons/icon.png}"
+    export CATAPULT_BUILD_GRADLE_MODULE CATAPULT_BUILD_LINUX_ICON CATAPULT_BUILD_ICON_ASSETS
 fi
 
 # Defaults
@@ -143,11 +220,76 @@ esac
 export CATAPULT_BUILD_PROVISIONING_PROFILE
 
 export CATAPULT_BUILD_KIND CATAPULT_BUILD_EXECUTABLE
-export CATAPULT_BUILD_PLATFORM CATAPULT_BUILD_CONFIGURATION
+export CATAPULT_BUILD_PLATFORM CATAPULT_BUILD_PLATFORMS CATAPULT_BUILD_CONFIGURATION
 export CATAPULT_BUILD_ICON CATAPULT_BUILD_ASSETS
 export CATAPULT_BUILD_ICON_COMMAND
 export CATAPULT_BUILD_ENTITLEMENTS_DIRECT CATAPULT_BUILD_ENTITLEMENTS_APPSTORE
 export CATAPULT_BUILD_PACKAGE_MANAGER CATAPULT_BUILD_TAURI_DIR CATAPULT_BUILD_FRONTEND_BUILD
+
+# Runs the app's Tauri CLI through its package manager.
+catapult_tauri() {
+    case "$CATAPULT_BUILD_PACKAGE_MANAGER" in
+        bun)  bun run tauri "$@" ;;
+        pnpm) pnpm tauri "$@" ;;
+        yarn) yarn tauri "$@" ;;
+        npm)  npm run tauri -- "$@" ;;
+    esac
+}
+
+catapult_install_dependencies() {
+    case "$CATAPULT_BUILD_PACKAGE_MANAGER" in
+        bun)  bun install ;;
+        pnpm) pnpm install ;;
+        yarn) yarn install ;;
+        npm)  npm install ;;
+    esac
+}
+
+# Writes <file>.sha256, with sha256sum where shasum is missing (Git Bash).
+catapult_checksum() {
+    local file="$1"
+    if command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$file" > "${file}.sha256"
+    else
+        sha256sum "$file" > "${file}.sha256"
+    fi
+    cat "${file}.sha256"
+}
+
+# signtool ships with the Windows SDK, which rarely puts it on PATH, so the newest x64 build is used.
+catapult_find_signtool() {
+    if command -v signtool >/dev/null 2>&1; then
+        command -v signtool
+    else
+        ls "/c/Program Files (x86)/Windows Kits/10/bin/"*/x64/signtool.exe 2>/dev/null | sort -V | tail -1
+    fi
+}
+
+# Authenticode signs an MSI with WINDOWS_CERTIFICATE (a base64 .pfx) and its password.
+catapult_sign_msi() {
+    local msi="$1" signtool pfx_dir pfx
+    echo "🔏 Signing MSI with Authenticode..."
+    signtool="$(catapult_find_signtool)"
+    if [ -z "$signtool" ]; then
+        echo "❌ signtool not found. Install the Windows SDK or put signtool on PATH."
+        exit 1
+    fi
+    pfx_dir="$(mktemp -d)"
+    pfx="${pfx_dir}/certificate.pfx"
+    echo "$WINDOWS_CERTIFICATE" | base64 --decode > "$pfx"
+    # Git Bash would rewrite signtool's /flags as paths, so conversion is off and the paths are converted by hand.
+    if ! MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' "$signtool" sign /fd sha256 \
+        /f "$(cygpath -w "$pfx")" /p "$WINDOWS_CERTIFICATE_PASSWORD" \
+        /tr http://timestamp.digicert.com /td sha256 \
+        "$(cygpath -w "$msi")"; then
+        rm -rf "$pfx_dir"
+        echo "❌ signtool could not sign ${msi}"
+        exit 1
+    fi
+    rm -rf "$pfx_dir"
+    echo "✅ Signed"
+    echo ""
+}
 
 # Sparkle's `sign_update` prints a whole attribute pair rather than the
 # signature on its own:

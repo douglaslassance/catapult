@@ -15,6 +15,7 @@ fi
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CATAPULT_PLATFORM=ios
 source "${SCRIPT_DIR}/config.sh"
 
 cd "$CATAPULT_APP_ROOT"

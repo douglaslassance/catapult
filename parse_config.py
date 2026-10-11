@@ -53,6 +53,9 @@ def main():
         sys.stderr.write(f"catapult: invalid TOML in {path}: {e}\n")
         sys.exit(1)
 
+    # Windows Python writes CRLF in the ANSI code page, and bash would eval the stray \r into every value.
+    sys.stdout.reconfigure(encoding="utf-8", newline="\n")
+
     for section, value in cfg.items():
         if isinstance(value, dict):
             print(f"export CATAPULT_HAS_{section.upper()}=1")

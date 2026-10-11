@@ -28,6 +28,7 @@ swift_target  = "App"                      # SPM target name; resource bundle is
 
 # For kind = "tauri", instead of swift_target use:
 # package_manager     = "bun"              # "bun", "pnpm", "yarn", or "npm"
+# platform            = "desktop"          # also Windows and Linux, see below
 # tauri_dir           = "src-tauri"        # default
 # frontend_build      = "bun run build"    # default = "${package_manager} run build"
 
@@ -78,6 +79,66 @@ swift_target  = "App"                      # SPM target name; resource bundle is
 #
 # CATAPULT_BUILD_NUMBER is the latest commit's Unix timestamp, the same build
 # number the Apple paths use, which only ever increases as Play requires.
+
+# --- Tauri mobile apps --------------------------------------------------------
+# A Tauri app can ship on iOS and Android from one repo, and release both under
+# one version. `tauri ios build` and `tauri android build` drive the Xcode and
+# Gradle projects Tauri generated under src-tauri/gen, so the Apple and Android
+# fields above do not apply. Set:
+#
+# [build]
+# kind            = "tauri"
+# platforms       = ["ios", "android"]     # instead of platform
+# package_manager = "pnpm"
+# tauri_dir       = "src-tauri"            # default
+# bundle          = "src-tauri/gen/android/app/build/outputs/bundle/universalRelease/app-universal-release.aab"   # default
+#
+# Each platform takes the channel it always takes: [appstore] (plus
+# [testflight]) for iOS and [play] for Android. release.sh builds and publishes
+# them in turn, with the same version and the same build number, which catapult
+# passes to Tauri as the iOS bundleVersion and the Android versionCode.
+#
+# Android signing stays in the generated app/build.gradle.kts, which should read
+# the upload key from a gitignored keystore.properties. The Tauri CLI needs
+# ANDROID_HOME and NDK_HOME; catapult defaults them to Android Studio's SDK
+# folder and its newest NDK.
+
+# --- Compose desktop apps -----------------------------------------------------
+# Compose Multiplatform desktop apps build with Gradle and jpackage, which only
+# targets the OS it runs on. Each host makes its own artifacts (a DMG on macOS,
+# an MSI on Windows, a DEB and an AppImage on Linux), and catapult derives the
+# target triple from the host, so leave arch and target_triple unset.
+#
+# [build]
+# kind          = "compose"                # platform defaults to "desktop"
+# gradle_module = "composeApp"             # default
+# icon_assets   = "composeApp/icons/Assets.car"   # optional, macOS adaptive icon
+# linux_icon    = "composeApp/icons/icon.png"     # default, from gradle_module
+#
+# Gradle gets the version as -Papp.version. team_id, developer and min_macos are
+# only required on a Mac, where catapult stamps the version and min_macos into
+# the Info.plist jpackage wrote, merges [plist.extras], [plist.usage_descriptions]
+# and [plist.env] into it, and signs every native (inside jars too) with the
+# entitlements file. An adaptive icon wants CFBundleIconName = "AppIcon" in
+# [plist.extras] next to icon_assets.
+#
+# Only the Mac records the release, which keeps the version's extension .dmg
+# for the Homebrew cask. Homebrew runs only on a Mac, and the MSI is
+# Authenticode signed when WINDOWS_CERTIFICATE is set (see env.example).
+
+# --- Tauri desktop apps -------------------------------------------------------
+# A Tauri app builds on macOS, Windows and Linux like a Compose app, and makes
+# the same artifacts, with:
+#
+# [build]
+# kind            = "tauri"
+# platform        = "desktop"              # no arch or target_triple, the host decides
+# package_manager = "bun"
+#
+# Each host runs `tauri build` for its own bundles (app, msi, or deb and
+# appimage). With bundle.createUpdaterArtifacts, the updater manifest
+# ${slug}.json lists every host's bundle with its signature, so every host needs
+# TAURI_SIGNING_PRIVATE_KEY (see env.example).
 
 # --- Optional channels --- presence of each section enables that channel.
 

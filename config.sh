@@ -327,23 +327,3 @@ catapult_version() {
     version="${version#"$CATAPULT_APP_TAG_PREFIX"}"
     printf '%s' "${version:-${2:-}}"
 }
-
-# Sparkle's `sign_update` prints a whole attribute pair rather than the
-# signature on its own:
-#
-#     sparkle:edSignature="…" length="…"
-#
-# Only the signature belongs inside the appcast's attribute. Pasting the line
-# whole is what published a feed whose enclosure carried a nested
-# `sparkle:edSignature=` and a second `length`, which no Sparkle client can
-# verify and no XML parser should accept. Takes either shape and returns the
-# signature.
-catapult_ed_signature() {
-    local raw="$1"
-    if [[ "$raw" == *edSignature=* ]]; then
-        printf '%s' "$raw" | sed -n 's/.*edSignature="\([^"]*\)".*/\1/p'
-    else
-        printf '%s' "$raw"
-    fi
-}
-

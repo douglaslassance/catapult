@@ -281,46 +281,6 @@ shasum -a 256 "${DIST_DIR}/${DMG_NAME}" > "${DIST_DIR}/${DMG_NAME}.sha256"
 cat "${DIST_DIR}/${DMG_NAME}.sha256"
 echo ""
 
-# Sparkle signature (optional)
-if [ -n "${CATAPULT_HAS_SPARKLE:-}" ]; then
-    SPARKLE_BIN=$(find .build/artifacts -name "sign_update" 2>/dev/null | head -1)
-    if [ -z "$SPARKLE_BIN" ]; then
-        echo "⚠️  sign_update not found — skipping Sparkle signing"
-    elif [ -z "${SPARKLE_PUBLIC_KEY:-}" ]; then
-        echo "⚠️  SPARKLE_PUBLIC_KEY not set, skipping Sparkle signing"
-    else
-        SPARKLE_TOOLS_DIR=$(dirname "$SPARKLE_BIN")
-        echo "✍️  Signing DMG for Sparkle..."
-
-        if [ -n "${SPARKLE_PRIVATE_KEY:-}" ]; then
-            SPARKLE_KEY_FILE=$(mktemp /tmp/sparkle_key_XXXXXX)
-            echo "$SPARKLE_PRIVATE_KEY" | base64 --decode > "$SPARKLE_KEY_FILE"
-            ED_SIG=$("$SPARKLE_TOOLS_DIR/sign_update" "${DIST_DIR}/${DMG_NAME}" --ed-key-file "$SPARKLE_KEY_FILE" 2>/dev/null)
-            rm -f "$SPARKLE_KEY_FILE"
-        elif [ -n "${SPARKLE_PRIVATE_KEY_FILE:-}" ]; then
-            ED_SIG=$("$SPARKLE_TOOLS_DIR/sign_update" "${DIST_DIR}/${DMG_NAME}" --ed-key-file "$SPARKLE_PRIVATE_KEY_FILE" 2>/dev/null)
-        else
-            ED_SIG=$("$SPARKLE_TOOLS_DIR/sign_update" "${DIST_DIR}/${DMG_NAME}" 2>/dev/null)
-        fi
-
-        if [ -z "$ED_SIG" ]; then
-            echo "❌ Failed to sign DMG for Sparkle"
-            exit 1
-        fi
-
-        # Stored as the signature alone, so whoever reads it next does not have
-        # to know what shape the tool printed.
-        ED_SIG=$(catapult_ed_signature "$ED_SIG")
-        if [ -z "$ED_SIG" ]; then
-            echo "❌ Could not read the signature out of sign_update's output"
-            exit 1
-        fi
-        echo "$ED_SIG" > "${DIST_DIR}/${DMG_NAME}.edsig"
-        echo "✅ Sparkle signature saved"
-    fi
-    echo ""
-fi
-
 echo "✅ Build complete!"
 echo ""
 echo "Files created in ${DIST_DIR}/:"

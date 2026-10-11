@@ -14,8 +14,8 @@ Requires Python 3.11+ (tomllib).
 """
 
 import os
-import sys
 import shlex
+import sys
 
 try:
     import tomllib

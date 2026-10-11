@@ -238,6 +238,9 @@ When bumping the submodule SHA, update the `uses:` line to match.
 For a repo with several targets, pass `target: "desktop"` and trigger on that
 target's tags, as in `tags: ['desktop-*.*.*']`.
 
+A desktop app that needs more Linux packages than Tauri's lists them as
+`build.linux_packages`, and the Linux leg installs them with apt.
+
 ### Several apps in one repo
 
 One `catapult.toml` can release several apps, say a Mac app and an iOS app that
@@ -298,7 +301,8 @@ arch          = "arm64"
 target_triple = "aarch64-apple-darwin"
 swift_target  = "App"                      # SPM target name (swift only)
 # For Tauri: package_manager = "bun" | "pnpm" | "yarn" | "npm",
-#            platform = "desktop" for Windows and Linux too (no arch or target_triple)
+#            platform = "desktop" for Windows and Linux too (no arch or target_triple),
+#            linux_packages = ["libasound2-dev"] for apt packages the Linux build needs
 # For Compose: gradle_module = "composeApp", icon_assets = "composeApp/icons/Assets.car",
 #              linux_icon = "composeApp/icons/icon.png" (no arch or target_triple)
 

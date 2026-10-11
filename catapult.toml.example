@@ -31,6 +31,7 @@ swift_target  = "App"                      # SPM target name; resource bundle is
 # For kind = "tauri", instead of swift_target use:
 # package_manager     = "bun"              # "bun", "pnpm", "yarn", or "npm"
 # platform            = "desktop"          # also Windows and Linux, see below
+# linux_packages      = ["libasound2-dev"] # extra apt packages for the Linux release leg
 # tauri_dir           = "src-tauri"        # default
 # frontend_build      = "bun run build"    # default = "${package_manager} run build"
 

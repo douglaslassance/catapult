@@ -100,14 +100,14 @@ if [ "$HAS_BUNDLE" = "1" ] && [ -d "$CATAPULT_BUILD_ASSETS" ]; then
         "$CATAPULT_BUILD_ASSETS" 2>&1 | grep -v "^$" || true
 fi
 
-python3 "${SCRIPT_DIR}/render_plist.py" "$CATAPULT_CONFIG" \
+"$CATAPULT_PYTHON" "${SCRIPT_DIR}/render_plist.py" "$CATAPULT_CONFIG" \
     --kind appstore --version "$VERSION" --build-number "$BUILD_NUMBER" \
     --out "${APP_PATH}/Contents/Info.plist"
 
 echo "APPL????" > "${APP_PATH}/Contents/PkgInfo"
 
 if [ "$HAS_BUNDLE" = "1" ]; then
-    python3 "${SCRIPT_DIR}/render_plist.py" "$CATAPULT_CONFIG" \
+    "$CATAPULT_PYTHON" "${SCRIPT_DIR}/render_plist.py" "$CATAPULT_CONFIG" \
         --kind resource --version "$VERSION" \
         --out "${BUNDLE_PATH}/Info.plist"
 fi

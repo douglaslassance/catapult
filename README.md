@@ -8,13 +8,16 @@ publishes to:
 - the **Mac App Store** (.pkg via App Store Connect)
 - **iOS TestFlight / App Store** (.ipa via App Store Connect)
 - **Google Play** (.aab via the Google Play Developer API)
+- downloadable **MSI**, **DEB** and **AppImage** builds next to the DMG, for Compose and Tauri desktop apps
 
 Supports **Swift Package Manager** and **Tauri** macOS apps (sharing the
 notarize / upload / Homebrew steps; only the build step differs), plus **iOS
 Xcode-project** apps (archived and exported by `xcodebuild`, uploaded to App
 Store Connect — which is what puts a build on TestFlight), plus **Android
 Gradle** apps (bundled and signed by the app's own Gradle build, published to a
-Google Play track).
+Google Play track), plus **Tauri mobile** apps that release on iOS and Android
+together, plus **Compose Multiplatform** and **Tauri** desktop apps built on
+macOS, Windows and Linux.
 
 Each app picks which channels it ships through via its `catapult.toml`.
 
@@ -81,6 +84,71 @@ Publishing needs a Google Cloud service account invited in Play Console with
 release permission, its JSON key base64-encoded in `PLAY_SERVICE_ACCOUNT_JSON`.
 With `[play] track = "internal"`, testers get the build as soon as the upload
 commits, with release notes from the commit subjects since the previous tag.
+
+### Tauri mobile apps in brief
+
+A Tauri app ships on iOS and Android from one repo with `kind = "tauri"` and
+`platforms = ["ios", "android"]` in `catapult.toml`. `release.sh` then builds
+and publishes both under one version and one build number: `tauri ios build`
+exports the `.ipa` that `upload_ios.sh` and `testflight_ios.sh` take from
+there, and `tauri android build` makes the `.aab` that `upload_play.sh`
+publishes.
+
+```sh
+./catapult/release.sh 1.2.3                     # appstore,play
+./catapult/release.sh 1.2.3 --channels play     # Android only
+```
+
+### Compose desktop apps in brief
+
+Compose Multiplatform desktop support is `kind = "compose"` in `catapult.toml`,
+whose platform is then `desktop`. jpackage only builds for the OS it runs on,
+so a release runs once per host and each run uploads what that host made.
+
+| Host | Artifacts in `dist/`, each with a `.sha256` |
+|------|---------------------------------------------|
+| macOS | `${slug}-${version}-${target}.dmg`, signed inside out (natives inside jars too), notarized and stapled |
+| Windows | `${slug}-${version}-${target}.msi`, Authenticode signed when `WINDOWS_CERTIFICATE` is set |
+| Linux | `${slug}-${version}-${target}.deb` and `${slug}-${version}-${target}.AppImage` |
+
+```sh
+./catapult/release.sh 1.2.3              # s3 on any host, plus homebrew on a Mac
+```
+
+The app keeps a Gradle wrapper at its root and needs a JDK 17+. catapult runs
+`createDistributable`, `packageMsi` or `packageDeb` on the `composeApp` module
+(`[build] gradle_module` to change it) with `-Papp.version=<version>`. The
+target triple comes from the host, so leave `arch` and `target_triple` unset.
+On a Mac, catapult stamps the real version into the Info.plist (jpackage refuses
+a zero major version), merges `[plist.extras]`, `[plist.usage_descriptions]` and
+`[plist.env]` into it, and copies `[build] icon_assets` in as `Assets.car`. The
+Linux AppImage takes its icon from `[build] linux_icon`, and appimagetool is
+downloaded on first use.
+
+Only the macOS host records the release, since the release API keeps the
+extension of a version's first record and the Homebrew cask downloads the
+`.dmg`. In GitHub Actions, `platform: desktop` builds on `runner` (`macos-15` by
+default), `windows-latest` and `ubuntu-24.04`, and the Homebrew job takes the
+DMG from the macOS leg.
+
+### Tauri desktop apps in brief
+
+A Tauri app releases on macOS, Windows and Linux the same way once
+`catapult.toml` sets `platform = "desktop"` next to `kind = "tauri"`, without
+`arch` or `target_triple` since the host decides them. Each host runs `tauri
+build` for its own bundles and leaves the artifacts in the table above in
+`dist/`. The macOS DMG is signed, notarized and stapled as before.
+
+With `bundle.createUpdaterArtifacts`, the updater manifest `${slug}.json` lists
+`darwin-aarch64` (the `.app.tar.gz`), `windows-x86_64` (the MSI, signed for the
+updater after Authenticode), `linux-x86_64` (the AppImage) and
+`linux-x86_64-deb` (the `.deb`, which an app installed from it picks first),
+each with its signature. Every host writes its entries to
+`dist/${slug}-${version}-${target}.updater.json`, and `upload_manifest.sh`
+merges fragments into the published manifest. Run locally, `upload.sh` does
+that for its own host at once. In GitHub Actions the legs run in parallel, so
+the `updater-manifest` job merges every fragment once all legs succeeded. Each
+leg needs `TAURI_SIGNING_PRIVATE_KEY` and its password.
 
 ## Consuming catapult from an app
 
@@ -162,6 +230,7 @@ jobs:
     secrets: inherit
     with:
       channels: "s3,homebrew"   # or "s3,appstore,homebrew"
+      # platform: desktop       # Compose or Tauri apps, built on macOS, Windows and Linux
 ```
 
 When bumping the submodule SHA, update the `uses:` line to match.
@@ -189,11 +258,14 @@ category    = "public.app-category.productivity"
 min_macos   = "13.0"
 
 [build]
-kind          = "swift"                    # "swift" or "tauri"
+kind          = "swift"                    # "swift", "tauri", "xcodeproj", "gradle" or "compose"
 arch          = "arm64"
 target_triple = "aarch64-apple-darwin"
 swift_target  = "App"                      # SPM target name (swift only)
-# For Tauri: package_manager = "bun" | "pnpm" | "yarn" | "npm"
+# For Tauri: package_manager = "bun" | "pnpm" | "yarn" | "npm",
+#            platform = "desktop" for Windows and Linux too (no arch or target_triple)
+# For Compose: gradle_module = "composeApp", icon_assets = "composeApp/icons/Assets.car",
+#              linux_icon = "composeApp/icons/icon.png" (no arch or target_triple)
 
 # Optional sections — presence enables the channel
 [sparkle]
@@ -232,6 +304,8 @@ full annotated schema, including optional overrides.
 | appstore (CI) | `INSTALLER_CERT`, `INSTALLER_CERT_PASSWORD` | Mac Installer Distribution cert |
 | appstore (CI) | `PROVISIONING_PROFILE_B64` | base64 .provisionprofile |
 | play    | `PLAY_SERVICE_ACCOUNT_JSON` | Google Play service account key (base64 JSON) |
+| s3 (desktop on Windows) | `WINDOWS_CERTIFICATE`, `WINDOWS_CERTIFICATE_PASSWORD` | optional: Authenticode certificate (base64 .pfx) that signs the MSI |
+| s3 (Tauri) | `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | updater signing key, needed on every host |
 
 For local builds: `APPSTORE_CERT` / `INSTALLER_CERT` / provisioning profile
 should already be in your keychain and `~/Library/MobileDevice/Provisioning Profiles/`.
@@ -242,3 +316,9 @@ should already be in your keychain and `~/Library/MobileDevice/Provisioning Prof
 - Python 3.11+ (`brew install python@3.12` if your system Python is older)
 - For uploads: `awscli`, `gh`, `brew` (auto-installed by scripts when missing)
 - For Android: a JDK (Gradle and `jarsigner`) and `openssl`
+- For Compose desktop apps: a JDK 17+ on every host, Git Bash and the Windows
+  SDK's `signtool` on Windows (where `python` will do for Python), and `curl`
+  on Linux to fetch appimagetool
+- For Tauri desktop apps: Rust and the app's package manager on every host, Git
+  Bash and `signtool` on Windows, and Tauri's Linux build dependencies
+  (WebKitGTK 4.1 and friends) on Linux

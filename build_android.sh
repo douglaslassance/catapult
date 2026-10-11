@@ -2,29 +2,33 @@
 # build_android.sh builds a signed Android App Bundle (.aab) with Gradle for
 # Google Play. It is the Android counterpart to build_ios.sh.
 #
-# Requires build.kind = "gradle" and build.platform = "android" in
-# catapult.toml. Signing stays with the app's own Gradle config (e.g. a
-# gitignored keystore.properties), so the release task must produce a bundle
-# signed with the app's upload key; this script refuses an unsigned one.
+# Requires build.kind = "gradle" or "tauri" and build.platform = "android" (or
+# "android" among build.platforms) in catapult.toml. Signing stays with the
+# app's own Gradle config (e.g. a gitignored keystore.properties), so the
+# release task must produce a bundle signed with the app's upload key; this
+# script refuses an unsigned one.
 #
 # The version is handed to Gradle as CATAPULT_VERSION and CATAPULT_BUILD_NUMBER
 # environment variables. The app's build.gradle.kts should prefer them for
-# versionName and versionCode, as described in catapult.toml.example.
+# versionName and versionCode, as described in catapult.toml.example. A Tauri
+# app gets them through `tauri android build` instead, which writes them into
+# the Gradle project it generated.
 #
 # Usage: build_android.sh [version]
 
 if [[ "$1" == "-h" || "$1" == "--help" ]]; then
-    sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'
     exit 0
 fi
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CATAPULT_PLATFORM=android
 source "${SCRIPT_DIR}/config.sh"
 
-if [ "$CATAPULT_BUILD_KIND" != "gradle" ] || [ "$CATAPULT_BUILD_PLATFORM" != "android" ]; then
-    echo "❌ build_android.sh requires build.kind = 'gradle' and build.platform = 'android'" >&2
+if [ "$CATAPULT_BUILD_KIND" != "gradle" ] && [ "$CATAPULT_BUILD_KIND" != "tauri" ]; then
+    echo "❌ build_android.sh requires build.kind = 'gradle' or 'tauri'" >&2
     exit 1
 fi
 
@@ -48,16 +52,36 @@ if [ -n "${CATAPULT_BUILD_PREGENERATE:-}" ]; then
     eval "$CATAPULT_BUILD_PREGENERATE"
 fi
 
-if [ ! -x ./gradlew ]; then
-    echo "❌ ./gradlew not found at the app repo root" >&2
-    exit 1
-fi
-
 # A stale bundle from an earlier build must never be mistaken for this one.
 rm -f "$CATAPULT_BUILD_BUNDLE"
 
-CATAPULT_VERSION="$VERSION" CATAPULT_BUILD_NUMBER="$BUILD_NUMBER" \
-    ./gradlew --quiet ":${CATAPULT_BUILD_MODULE}:${CATAPULT_BUILD_TASK}"
+if [ "$CATAPULT_BUILD_KIND" = "tauri" ]; then
+    # The Tauri CLI wants both, so default them to where Android Studio installs them.
+    export ANDROID_HOME="${ANDROID_HOME:-${HOME}/Library/Android/sdk}"
+    if [ -z "${NDK_HOME:-}" ] && [ -d "${ANDROID_HOME}/ndk" ]; then
+        NDK_HOME="${ANDROID_HOME}/ndk/$(ls "${ANDROID_HOME}/ndk" | sort -V | tail -1)"
+        export NDK_HOME
+    fi
+
+    echo "📦 Installing dependencies…"
+    catapult_install_dependencies
+    echo ""
+
+    TAURI_CONFIG="{\"bundle\":{\"android\":{\"versionCode\":${BUILD_NUMBER}}}}"
+    [ -n "$VERSION" ] && TAURI_CONFIG="{\"version\":\"${VERSION}\",${TAURI_CONFIG#\{}"
+
+    echo "📦 Running tauri android build…"
+    catapult_tauri android build --ci --aab --config "$TAURI_CONFIG"
+    echo ""
+else
+    if [ ! -x ./gradlew ]; then
+        echo "❌ ./gradlew not found at the app repo root" >&2
+        exit 1
+    fi
+
+    CATAPULT_VERSION="$VERSION" CATAPULT_BUILD_NUMBER="$BUILD_NUMBER" \
+        ./gradlew --quiet ":${CATAPULT_BUILD_MODULE}:${CATAPULT_BUILD_TASK}"
+fi
 
 if [ ! -f "$CATAPULT_BUILD_BUNDLE" ]; then
     echo "❌ Expected bundle not found: ${CATAPULT_BUILD_BUNDLE}" >&2

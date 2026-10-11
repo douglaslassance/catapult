@@ -7,9 +7,12 @@ Two modes:
     plist as the base, inject version + signing/sparkle/appstore keys, and
     preserve every other key (document types, UTI declarations, etc.).
 
+`--base <plist>` instead merges catapult.toml's keys into a plist another tool
+wrote, such as the one jpackage puts in a Compose desktop app.
+
 Usage:
   render_plist.py <config> --kind direct|appstore|resource \\
-                  --version <v> --build-number <n> [--out <path>]
+                  --version <v> --build-number <n> [--base <plist>] [--out <path>]
 """
 import argparse
 import os
@@ -157,6 +160,26 @@ def render_passthrough(cfg: dict, kind: str, version: str, build_number: str,
     with open(full_template_path, "rb") as f:
         plist = plistlib.load(f)
 
+    return inject(plist, cfg, kind, version, build_number)
+
+def render_base(cfg: dict, kind: str, version: str, build_number: str, base_path: str) -> str:
+    """Layer usage descriptions, extras and min_macos onto a tool-written plist, then the per-build keys."""
+    with open(base_path, "rb") as f:
+        plist = plistlib.load(f)
+
+    declared = cfg.get("plist", {})
+    for k, v in (declared.get("usage_descriptions", {}) or {}).items():
+        plist[k] = str(v)
+    # Coerced like the generated plist, so booleans and integers keep their type and the rest become strings.
+    for k, v in (declared.get("extras", {}) or {}).items():
+        plist[k] = v if isinstance(v, (bool, int)) else str(v)
+    if cfg.get("app", {}).get("min_macos"):
+        plist["LSMinimumSystemVersion"] = cfg["app"]["min_macos"]
+
+    return inject(plist, cfg, kind, version, build_number)
+
+def inject(plist: dict, cfg: dict, kind: str, version: str, build_number: str) -> str:
+    """Write the keys that change per build into a loaded plist and serialize it."""
     plist["CFBundleShortVersionString"] = version
     plist["CFBundleVersion"] = build_number
 
@@ -186,6 +209,7 @@ def main():
     p.add_argument("--kind", required=True, choices=["direct", "appstore", "resource"])
     p.add_argument("--version", required=True)
     p.add_argument("--build-number", default="")
+    p.add_argument("--base")
     p.add_argument("--out")
     args = p.parse_args()
 
@@ -197,6 +221,8 @@ def main():
 
     if args.kind == "resource":
         content = render_resource(cfg, args.version)
+    elif args.base:
+        content = render_base(cfg, args.kind, args.version, build_number, args.base)
     else:
         template = cfg.get("plist", {}).get("template")
         if template:

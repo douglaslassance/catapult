@@ -15,9 +15,12 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/config.sh"
 
-# Dispatch by build kind. Swift continues below; Tauri delegates.
+# Dispatch by build kind. Swift continues below; Tauri and Compose delegate.
 if [ "$CATAPULT_BUILD_KIND" = "tauri" ]; then
     exec "${SCRIPT_DIR}/build_tauri.sh" "$@"
+fi
+if [ "$CATAPULT_BUILD_KIND" = "compose" ]; then
+    exec "${SCRIPT_DIR}/build_compose.sh" "$@"
 fi
 
 cd "$CATAPULT_APP_ROOT"
@@ -97,7 +100,7 @@ if [ -n "$BUNDLE_PATH" ] && [ -d "$CATAPULT_BUILD_ASSETS" ]; then
 fi
 
 # Info.plist for the app bundle
-python3 "${SCRIPT_DIR}/render_plist.py" "$CATAPULT_CONFIG" \
+"$CATAPULT_PYTHON" "${SCRIPT_DIR}/render_plist.py" "$CATAPULT_CONFIG" \
     --kind direct --version "$VERSION" \
     --out "${APP_PATH}/Contents/Info.plist"
 
@@ -120,7 +123,7 @@ echo "APPL????" > "${APP_PATH}/Contents/PkgInfo"
 
 # Resource bundle Info.plist (codesign/notarization scanner expects one)
 if [ -n "$BUNDLE_PATH" ]; then
-    python3 "${SCRIPT_DIR}/render_plist.py" "$CATAPULT_CONFIG" \
+    "$CATAPULT_PYTHON" "${SCRIPT_DIR}/render_plist.py" "$CATAPULT_CONFIG" \
         --kind resource --version "$VERSION" \
         --out "${BUNDLE_PATH}/Info.plist"
 fi

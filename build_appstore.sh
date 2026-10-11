@@ -21,7 +21,7 @@ fi
 
 cd "$CATAPULT_APP_ROOT"
 
-VERSION="${1:-$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")}"
+VERSION="$(catapult_version "${1:-}" 0.0.0)"
 BUILD_NUMBER="$(git log -1 --format=%ct 2>/dev/null || echo "$VERSION")"
 COMMIT_SHA="$(git log -1 --format=%h 2>/dev/null || echo "unknown")"
 

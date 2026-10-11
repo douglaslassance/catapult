@@ -33,11 +33,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-try:
-    import tomllib
-except ImportError:
-    sys.stderr.write("catapult: need Python 3.11+\n")
-    sys.exit(1)
+from parse_config import load_config
 
 API = "https://api.appstoreconnect.apple.com"
 WHATS_NEW_MAX = 4000
@@ -353,8 +349,7 @@ def main() -> int:
 
     sys.stdout.reconfigure(line_buffering=True)
 
-    with open(args.config, "rb") as f:
-        cfg = tomllib.load(f)
+    cfg = load_config(args.config, os.environ.get("CATAPULT_TARGET"))
 
     bundle_id = cfg["app"]["bundle_id"]
     tf = cfg.get("testflight", {})

@@ -1,5 +1,6 @@
 #!/bin/bash
-# Loads catapult.toml from the current working directory into CATAPULT_* env vars.
+# Loads catapult.toml from the current working directory into CATAPULT_* env vars,
+# and moves into the app root.
 # Source this from any sibling script as:
 #   source "$(dirname "$0")/config.sh"
 #
@@ -11,21 +12,24 @@ set -e
 CATAPULT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # App repo root = current working directory. All paths in catapult.toml are
-# resolved relative to it.
+# resolved relative to it, or to the target's app.path when it has [targets].
 CATAPULT_APP_ROOT="${CATAPULT_APP_ROOT:-$(pwd)}"
 CATAPULT_CONFIG="${CATAPULT_CONFIG:-${CATAPULT_APP_ROOT}/catapult.toml}"
-
-# Optional .env for local secrets. `set -a` auto-exports every assignment so
-# subprocesses (notably python helpers like render_plist.py) see the values.
-if [ -f "${CATAPULT_APP_ROOT}/.env" ]; then
-    set -a
-    source "${CATAPULT_APP_ROOT}/.env"
-    set +a
-fi
 
 if [ ! -f "$CATAPULT_CONFIG" ]; then
     echo "❌ catapult: $CATAPULT_CONFIG not found" >&2
     exit 1
+fi
+CATAPULT_CONFIG="$(cd "$(dirname "$CATAPULT_CONFIG")" && pwd)/$(basename "$CATAPULT_CONFIG")"
+CATAPULT_CONFIG_DIR="$(dirname "$CATAPULT_CONFIG")"
+
+# Optional .env beside catapult.toml for local secrets. `set -a` auto-exports
+# every assignment so subprocesses (notably python helpers like
+# render_plist.py) see the values.
+if [ -f "${CATAPULT_CONFIG_DIR}/.env" ]; then
+    set -a
+    source "${CATAPULT_CONFIG_DIR}/.env"
+    set +a
 fi
 
 # The OS this runs on. Desktop builds can only produce artifacts for it.
@@ -47,8 +51,15 @@ if [ -z "${CATAPULT_PYTHON:-}" ]; then
 fi
 export CATAPULT_PYTHON
 
-# Load TOML into env
-eval "$("$CATAPULT_PYTHON" "${CATAPULT_DIR}/parse_config.py" "$CATAPULT_CONFIG")"
+# Load TOML into env. CATAPULT_TARGET picks one of its [targets], if any.
+CATAPULT_EXPORTS="$("$CATAPULT_PYTHON" "${CATAPULT_DIR}/parse_config.py" "$CATAPULT_CONFIG")" || exit 1
+eval "$CATAPULT_EXPORTS"
+
+if [ -n "${CATAPULT_APP_PATH:-}" ]; then
+    CATAPULT_APP_ROOT="${CATAPULT_CONFIG_DIR}/${CATAPULT_APP_PATH}"
+fi
+cd "$CATAPULT_APP_ROOT"
+export CATAPULT_APP_ROOT CATAPULT_CONFIG CATAPULT_TARGET
 
 # Required for any kind/platform. On Android, bundle_id is the applicationId.
 : "${CATAPULT_APP_NAME:?app.name required in catapult.toml}"
@@ -196,6 +207,9 @@ CATAPULT_BUILD_PROVISIONING_PROFILE="${CATAPULT_BUILD_PROVISIONING_PROFILE:-${CA
 # compiled binary name differs (e.g. trotter has APP_NAME=Trotter but the
 # binary in .build/release is "trotter").
 CATAPULT_BUILD_EXECUTABLE="${CATAPULT_BUILD_EXECUTABLE:-${CATAPULT_APP_NAME}}"
+# Release tags are "<tag_prefix><version>", so several apps can release from one
+# repo (e.g. "desktop-1.2.0" and "mobile-1.0.0"). Empty means bare version tags.
+CATAPULT_APP_TAG_PREFIX="${CATAPULT_APP_TAG_PREFIX:-}"
 
 # Derived identities
 export CATAPULT_APP_SIGNING_IDENTITY_APPSTORE="Apple Distribution: ${CATAPULT_APP_DEVELOPER} (${CATAPULT_APP_TEAM_ID})"
@@ -219,7 +233,7 @@ case "$CATAPULT_BUILD_PROVISIONING_PROFILE" in
 esac
 export CATAPULT_BUILD_PROVISIONING_PROFILE
 
-export CATAPULT_BUILD_KIND CATAPULT_BUILD_EXECUTABLE
+export CATAPULT_BUILD_KIND CATAPULT_BUILD_EXECUTABLE CATAPULT_APP_TAG_PREFIX
 export CATAPULT_BUILD_PLATFORM CATAPULT_BUILD_PLATFORMS CATAPULT_BUILD_CONFIGURATION
 export CATAPULT_BUILD_ICON CATAPULT_BUILD_ASSETS
 export CATAPULT_BUILD_ICON_COMMAND
@@ -289,6 +303,29 @@ catapult_sign_msi() {
     rm -rf "$pfx_dir"
     echo "✅ Signed"
     echo ""
+}
+
+# The latest of this app's release tags reachable from a revision (HEAD by
+# default). Fails when there is none.
+catapult_latest_tag() {
+    if [ -n "$CATAPULT_APP_TAG_PREFIX" ]; then
+        git describe --tags --abbrev=0 --match "${CATAPULT_APP_TAG_PREFIX}[0-9]*" "$@" 2>/dev/null
+    else
+        git describe --tags --abbrev=0 "$@" 2>/dev/null
+    fi
+}
+
+# The version to release: the one given (a version or a full tag), else the
+# latest tag's, else the fallback. Always without the tag prefix.
+#
+#   VERSION="$(catapult_version "${1:-}" 0.0.0)"
+catapult_version() {
+    local version="${1:-}"
+    if [ -z "$version" ]; then
+        version="$(catapult_latest_tag || true)"
+    fi
+    version="${version#"$CATAPULT_APP_TAG_PREFIX"}"
+    printf '%s' "${version:-${2:-}}"
 }
 
 # Sparkle's `sign_update` prints a whole attribute pair rather than the

@@ -39,7 +39,7 @@ cd "$CATAPULT_APP_ROOT"
 # all Play asks of it. It stays under Play's 2,100,000,000 ceiling until 2036.
 VERSION="${1:-}"
 [ "$VERSION" = "0.0.0" ] && VERSION=""
-[ -z "$VERSION" ] && VERSION="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+VERSION="$(catapult_version "$VERSION")"
 BUILD_NUMBER="$(git log -1 --format=%ct 2>/dev/null || echo 1)"
 COMMIT_SHA="$(git log -1 --format=%h 2>/dev/null || echo "unknown")"
 

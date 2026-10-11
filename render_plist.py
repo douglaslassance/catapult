@@ -19,11 +19,7 @@ import os
 import plistlib
 import sys
 
-try:
-    import tomllib
-except ImportError:
-    sys.stderr.write("catapult: need Python 3.11+\n")
-    sys.exit(1)
+from parse_config import load_config
 
 def xml_escape(s: str) -> str:
     return (
@@ -213,11 +209,10 @@ def main():
     p.add_argument("--out")
     args = p.parse_args()
 
-    with open(args.config, "rb") as f:
-        cfg = tomllib.load(f)
+    cfg = load_config(args.config, os.environ.get("CATAPULT_TARGET"))
 
     build_number = args.build_number or args.version
-    app_root = os.path.dirname(os.path.abspath(args.config))
+    app_root = os.environ.get("CATAPULT_APP_ROOT") or os.path.dirname(os.path.abspath(args.config))
 
     if args.kind == "resource":
         content = render_resource(cfg, args.version)

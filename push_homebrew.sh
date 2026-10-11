@@ -51,7 +51,7 @@ HOMEBREW_REPO=$(echo "$HOMEBREW_TAP_URL" | sed 's|https://github.com/||' | sed '
 TAP_NAME=$(echo "$HOMEBREW_REPO" | sed 's|/homebrew-|/|')
 CASK_FILE="Casks/${BREW_NAME:0:1}/${BREW_NAME}.rb"
 
-VERSION="${ARGS[0]:-$(git describe --tags --abbrev=0 2>/dev/null || echo "")}"
+VERSION="$(catapult_version "${ARGS[0]:-}")"
 if [ -z "$VERSION" ]; then
     echo -e "${RED}❌ Version required${NC}"
     exit 1

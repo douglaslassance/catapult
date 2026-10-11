@@ -45,7 +45,7 @@ esac
 
 cd "$CATAPULT_APP_ROOT"
 
-VERSION="${1:-$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")}"
+VERSION="$(catapult_version "${1:-}" 0.0.0)"
 APP_NAME="$CATAPULT_APP_NAME"
 SLUG="$CATAPULT_APP_SLUG"
 TARGET="$CATAPULT_BUILD_TARGET_TRIPLE"

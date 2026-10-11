@@ -119,7 +119,7 @@ if [ -n "$ICON_NAME" ] && [ ! -f "${APP_PATH}/Contents/Resources/Assets.car" ]; 
     exit 1
 fi
 
-echo "APPL????" > "${APP_PATH}/Contents/PkgInfo"
+echo "APPL????" >"${APP_PATH}/Contents/PkgInfo"
 
 # Resource bundle Info.plist (codesign/notarization scanner expects one)
 if [ -n "$BUNDLE_PATH" ]; then
@@ -198,128 +198,13 @@ fi
 echo "✅ App bundle created"
 echo ""
 
-# DMG
-echo "💿 Creating DMG..."
-rm -f "${DIST_DIR}/${DMG_NAME}"
-VOLNAME="${CATAPULT_DMG_VOLUME_NAME:-$APP_NAME}"
-DMG_MOUNT="/tmp/${SLUG}-dmg-$$"
-DMG_TEMP="/tmp/${SLUG}-temp-$$.dmg"
-mkdir -p "$DMG_MOUNT"
-hdiutil create -size 300m -fs HFS+ -volname "$VOLNAME" "$DMG_TEMP" -quiet
-hdiutil attach "$DMG_TEMP" -nobrowse -noverify -noautoopen -mountpoint "$DMG_MOUNT" -quiet
-ditto "${APP_PATH}" "${DMG_MOUNT}/${APP_NAME}.app"
-ln -sf /Applications "${DMG_MOUNT}/Applications"
-hdiutil detach "$DMG_MOUNT" -quiet
-hdiutil convert "$DMG_TEMP" -format UDZO -imagekey zlib-level=9 -o "${DIST_DIR}/${DMG_NAME}" -quiet
-rm -f "$DMG_TEMP"
-rmdir "$DMG_MOUNT"
-echo "✅ DMG created"
-echo ""
+catapult_make_dmg "$APP_PATH" "${DIST_DIR}/${DMG_NAME}"
+catapult_notarize "${DIST_DIR}/${DMG_NAME}"
 
-if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
-    echo "🔏 Signing DMG..."
-    codesign --force --sign "$APPLE_SIGNING_IDENTITY" "${DIST_DIR}/${DMG_NAME}"
-    echo ""
-fi
-
-# Notarize + staple
-if [ -n "${NOTARIZATION_KEY_ID:-}" ] && [ -n "${NOTARIZATION_ISSUER_ID:-}" ] && [ -n "${NOTARIZATION_KEY:-}" ]; then
-    echo "📝 Submitting for notarization..."
-    NOTARIZATION_KEY_FILE=$(mktemp /tmp/notarization_XXXXXX)
-    echo "$NOTARIZATION_KEY" | base64 --decode > "$NOTARIZATION_KEY_FILE"
-
-    SUBMIT_OUTPUT=$(xcrun notarytool submit "${DIST_DIR}/${DMG_NAME}" \
-        --key "$NOTARIZATION_KEY_FILE" \
-        --key-id "$NOTARIZATION_KEY_ID" \
-        --issuer "$NOTARIZATION_ISSUER_ID" 2>&1)
-    echo "$SUBMIT_OUTPUT"
-
-    SUBMISSION_ID=$(echo "$SUBMIT_OUTPUT" | grep -E '^\s*id:' | head -1 | awk '{print $2}')
-    if [ -z "$SUBMISSION_ID" ]; then
-        echo "❌ Failed to get submission ID"
-        rm -f "$NOTARIZATION_KEY_FILE"
-        exit 1
-    fi
-    echo "Submission ID: $SUBMISSION_ID"
-    echo ""
-
-    echo "⏳ Waiting for notarization result..."
-    WAIT_OUTPUT=$(xcrun notarytool wait "$SUBMISSION_ID" \
-        --key "$NOTARIZATION_KEY_FILE" \
-        --key-id "$NOTARIZATION_KEY_ID" \
-        --issuer "$NOTARIZATION_ISSUER_ID" 2>&1)
-    echo "$WAIT_OUTPUT"
-
-    NOTARIZATION_STATUS=$(echo "$WAIT_OUTPUT" | grep -E 'status:' | tail -1 | awk '{print $2}')
-
-    if [ "$NOTARIZATION_STATUS" != "Accepted" ]; then
-        echo "❌ Notarization failed: ${NOTARIZATION_STATUS}"
-        xcrun notarytool log "$SUBMISSION_ID" \
-            --key "$NOTARIZATION_KEY_FILE" \
-            --key-id "$NOTARIZATION_KEY_ID" \
-            --issuer "$NOTARIZATION_ISSUER_ID" 2>&1 || true
-        rm -f "$NOTARIZATION_KEY_FILE"
-        exit 1
-    fi
-
-    rm -f "$NOTARIZATION_KEY_FILE"
-    echo "✅ Notarized"
-    echo ""
-
-    echo "📎 Stapling..."
-    xcrun stapler staple "${DIST_DIR}/${DMG_NAME}"
-    echo "✅ Stapled"
-    echo ""
-else
-    echo "⚠️  Notarization skipped (credentials not set)"
-    echo ""
-fi
-
-# SHA256 (after stapling, since stapling modifies the DMG)
+# After stapling, which modifies the DMG.
 echo "🔐 Generating checksum..."
-shasum -a 256 "${DIST_DIR}/${DMG_NAME}" > "${DIST_DIR}/${DMG_NAME}.sha256"
-cat "${DIST_DIR}/${DMG_NAME}.sha256"
+catapult_checksum "${DIST_DIR}/${DMG_NAME}"
 echo ""
-
-# Sparkle signature (optional)
-if [ -n "${CATAPULT_HAS_SPARKLE:-}" ]; then
-    SPARKLE_BIN=$(find .build/artifacts -name "sign_update" 2>/dev/null | head -1)
-    if [ -z "$SPARKLE_BIN" ]; then
-        echo "⚠️  sign_update not found — skipping Sparkle signing"
-    elif [ -z "${SPARKLE_PUBLIC_KEY:-}" ]; then
-        echo "⚠️  SPARKLE_PUBLIC_KEY not set, skipping Sparkle signing"
-    else
-        SPARKLE_TOOLS_DIR=$(dirname "$SPARKLE_BIN")
-        echo "✍️  Signing DMG for Sparkle..."
-
-        if [ -n "${SPARKLE_PRIVATE_KEY:-}" ]; then
-            SPARKLE_KEY_FILE=$(mktemp /tmp/sparkle_key_XXXXXX)
-            echo "$SPARKLE_PRIVATE_KEY" | base64 --decode > "$SPARKLE_KEY_FILE"
-            ED_SIG=$("$SPARKLE_TOOLS_DIR/sign_update" "${DIST_DIR}/${DMG_NAME}" --ed-key-file "$SPARKLE_KEY_FILE" 2>/dev/null)
-            rm -f "$SPARKLE_KEY_FILE"
-        elif [ -n "${SPARKLE_PRIVATE_KEY_FILE:-}" ]; then
-            ED_SIG=$("$SPARKLE_TOOLS_DIR/sign_update" "${DIST_DIR}/${DMG_NAME}" --ed-key-file "$SPARKLE_PRIVATE_KEY_FILE" 2>/dev/null)
-        else
-            ED_SIG=$("$SPARKLE_TOOLS_DIR/sign_update" "${DIST_DIR}/${DMG_NAME}" 2>/dev/null)
-        fi
-
-        if [ -z "$ED_SIG" ]; then
-            echo "❌ Failed to sign DMG for Sparkle"
-            exit 1
-        fi
-
-        # Stored as the signature alone, so whoever reads it next does not have
-        # to know what shape the tool printed.
-        ED_SIG=$(catapult_ed_signature "$ED_SIG")
-        if [ -z "$ED_SIG" ]; then
-            echo "❌ Could not read the signature out of sign_update's output"
-            exit 1
-        fi
-        echo "$ED_SIG" > "${DIST_DIR}/${DMG_NAME}.edsig"
-        echo "✅ Sparkle signature saved"
-    fi
-    echo ""
-fi
 
 echo "✅ Build complete!"
 echo ""

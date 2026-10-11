@@ -12,16 +12,16 @@ Output convention:
 
 Requires Python 3.11+ (tomllib).
 """
+
 import os
-import sys
 import shlex
+import sys
 
 try:
     import tomllib
 except ImportError:
     sys.stderr.write(
-        "catapult: tomllib not available — need Python 3.11+ "
-        "(brew install python@3.12)\n"
+        "catapult: tomllib not available — need Python 3.11+ (brew install python@3.12)\n"
     )
     sys.exit(1)
 

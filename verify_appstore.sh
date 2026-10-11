@@ -22,8 +22,14 @@ EXPECTED_SIGNING_ID="$CATAPULT_APP_SIGNING_IDENTITY_APPSTORE"
 PASS=0
 FAIL=0
 
-pass() { echo "✅ $1"; PASS=$((PASS+1)); }
-fail() { echo "❌ $1"; FAIL=$((FAIL+1)); }
+pass() {
+    echo "✅ $1"
+    PASS=$((PASS + 1))
+}
+fail() {
+    echo "❌ $1"
+    FAIL=$((FAIL + 1))
+}
 info() { echo "ℹ️  $1"; }
 
 echo "🔍 Verifying ${APP_PATH}"
@@ -56,7 +62,7 @@ if [ -n "$RPATH_DEPS" ]; then
         if [ ! -d "${APP_PATH}/Contents/Frameworks/${framework}" ]; then
             MISSING="${MISSING}    ${dep}\n"
         fi
-    done <<< "$RPATH_DEPS"
+    done <<<"$RPATH_DEPS"
     if [ -n "$MISSING" ]; then
         fail "Binary references @rpath frameworks that aren't embedded:"
         printf "%b" "$MISSING"

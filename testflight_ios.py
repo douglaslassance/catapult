@@ -21,6 +21,7 @@ Usage:
                     --version 1.2.3 --build-number 1786291989 \\
                     --notes-file notes.txt [--timeout 1200]
 """
+
 import argparse
 import base64
 import json
@@ -38,8 +39,10 @@ from parse_config import load_config
 API = "https://api.appstoreconnect.apple.com"
 WHATS_NEW_MAX = 4000
 
+
 class ASCError(RuntimeError):
     pass
+
 
 def load_private_key() -> str:
     """Return the .p8 PEM, from the env var (raw or base64) or the key dir."""
@@ -51,10 +54,8 @@ def load_private_key() -> str:
         try:
             return base64.b64decode(raw).decode()
         except Exception as e:
-            raise ASCError(f"NOTARIZATION_KEY is neither PEM nor base64 PEM: {e}")
-    path = os.path.expanduser(
-        f"~/.appstoreconnect/private_keys/AuthKey_{key_id}.p8"
-    )
+            raise ASCError(f"NOTARIZATION_KEY is neither PEM nor base64 PEM: {e}") from None
+    path = os.path.expanduser(f"~/.appstoreconnect/private_keys/AuthKey_{key_id}.p8")
     if os.path.exists(path):
         with open(path) as f:
             return f.read()
@@ -63,8 +64,10 @@ def load_private_key() -> str:
         f".p8) or place it at {path}"
     )
 
+
 def b64url(data: bytes) -> bytes:
     return base64.urlsafe_b64encode(data).rstrip(b"=")
+
 
 def der_to_raw(der: bytes) -> bytes:
     """Convert an ECDSA DER SEQUENCE{INTEGER r, INTEGER s} to raw r||s."""
@@ -85,6 +88,7 @@ def der_to_raw(der: bytes) -> bytes:
             raise ASCError("ECDSA signature component longer than P-256 allows")
         out += value.rjust(32, b"\x00")
     return out
+
 
 def make_token() -> str:
     key_id = os.environ.get("NOTARIZATION_KEY_ID")
@@ -120,6 +124,7 @@ def make_token() -> str:
 
     return (signing_input + b"." + b64url(sig)).decode()
 
+
 class Client:
     def __init__(self, dry_run: bool = False):
         self._token = None
@@ -153,9 +158,7 @@ class Client:
             detail = e.read().decode(errors="replace")
             try:
                 errors = json.loads(detail).get("errors", [])
-                detail = "; ".join(
-                    f"{x.get('title')}: {x.get('detail')}" for x in errors
-                ) or detail
+                detail = "; ".join(f"{x.get('title')}: {x.get('detail')}" for x in errors) or detail
             except Exception:
                 pass
             raise ASCError(f"{method} {path} -> HTTP {e.code}: {detail}") from None
@@ -169,12 +172,14 @@ class Client:
     def patch(self, path, body):
         return self.request("PATCH", path, body)
 
+
 def find_app(client: Client, bundle_id: str) -> dict:
     res = client.get("/v1/apps", **{"filter[bundleId]": bundle_id, "limit": "2"})
     apps = res.get("data", [])
     if not apps:
         raise ASCError(f"No App Store Connect app with bundle id {bundle_id}")
     return apps[0]
+
 
 def wait_for_build(
     client: Client, app_id: str, version: str, build_number: str, timeout: int
@@ -221,16 +226,13 @@ def wait_for_build(
             )
         time.sleep(30)
 
+
 def set_whats_new(
     client: Client, build_id: str, locale: str, notes: str, force: bool = False
 ) -> None:
     notes = notes.strip()[:WHATS_NEW_MAX]
-    existing = client.get(f"/v1/builds/{build_id}/betaBuildLocalizations").get(
-        "data", []
-    )
-    match = next(
-        (x for x in existing if x["attributes"].get("locale") == locale), None
-    )
+    existing = client.get(f"/v1/builds/{build_id}/betaBuildLocalizations").get("data", [])
+    match = next((x for x in existing if x["attributes"].get("locale") == locale), None)
     if match is None and existing:
         match = existing[0]
 
@@ -262,13 +264,12 @@ def set_whats_new(
                 "data": {
                     "type": "betaBuildLocalizations",
                     "attributes": {"whatsNew": notes, "locale": locale},
-                    "relationships": {
-                        "build": {"data": {"type": "builds", "id": build_id}}
-                    },
+                    "relationships": {"build": {"data": {"type": "builds", "id": build_id}}},
                 }
             },
         )
     print(f"✅ Set What to Test ({locale})")
+
 
 def resolve_groups(client: Client, app_id: str, names: list) -> list:
     res = client.get(
@@ -289,6 +290,7 @@ def resolve_groups(client: Client, app_id: str, names: list) -> list:
         )
     return [by_name[n] for n in names]
 
+
 def attach_groups(client: Client, build_id: str, groups: list) -> None:
     current = {
         g["id"]
@@ -307,6 +309,7 @@ def attach_groups(client: Client, build_id: str, groups: list) -> None:
     )
     print(f"✅ Attached group(s): {', '.join(g['attributes']['name'] for g in todo)}")
 
+
 def submit_for_review(client: Client, build_id: str) -> str:
     existing = client.get(f"/v1/builds/{build_id}/betaAppReviewSubmission").get("data")
     if existing:
@@ -318,15 +321,14 @@ def submit_for_review(client: Client, build_id: str) -> str:
         {
             "data": {
                 "type": "betaAppReviewSubmissions",
-                "relationships": {
-                    "build": {"data": {"type": "builds", "id": build_id}}
-                },
+                "relationships": {"build": {"data": {"type": "builds", "id": build_id}}},
             }
         },
     )
     state = res.get("data", {}).get("attributes", {}).get("betaReviewState", "UNKNOWN")
     print(f"✅ Submitted for Beta App Review (state: {state})")
     return state
+
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
@@ -357,9 +359,7 @@ def main() -> int:
     group_names = tf.get("groups", [])
     if isinstance(group_names, str):
         group_names = [group_names]
-    if not isinstance(group_names, list) or not all(
-        isinstance(g, str) for g in group_names
-    ):
+    if not isinstance(group_names, list) or not all(isinstance(g, str) for g in group_names):
         raise ASCError("[testflight] groups must be a list of group name strings")
     submit = tf.get("submit_for_review", True)
 
@@ -377,9 +377,7 @@ def main() -> int:
     locale = app["attributes"].get("primaryLocale") or "en-US"
     print(f"📱 {app['attributes']['name']} ({bundle_id}) — app id {app_id}")
 
-    build = wait_for_build(
-        client, app_id, args.version, args.build_number, args.timeout
-    )
+    build = wait_for_build(client, app_id, args.version, args.build_number, args.timeout)
     build_id = build["id"]
     print(f"✅ Build {args.build_number} processed")
 
@@ -416,10 +414,10 @@ def main() -> int:
     print("🎉 TestFlight distribution configured.")
     if external:
         print(
-            "   External testers receive it once Apple approves the build "
-            "(usually within a day)."
+            "   External testers receive it once Apple approves the build (usually within a day)."
         )
     return 0
+
 
 if __name__ == "__main__":
     try:

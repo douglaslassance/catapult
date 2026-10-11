@@ -9,7 +9,7 @@ PULL_REQUEST=false
 ARGS=()
 for arg in "$@"; do
     case "$arg" in
-        -h|--help)
+        -h | --help)
             sed -n '2,6p' "$0" | sed 's/^# \{0,1\}//'
             exit 0
             ;;
@@ -32,7 +32,10 @@ cd "$CATAPULT_APP_ROOT"
 
 export GH_TOKEN="${HOMEBREW_TAP_ACCESS_TOKEN:-${GH_TOKEN:-}}"
 
-RED='\033[0;31m'; GREEN='\033[0;32m'; BLUE='\033[0;34m'; NC='\033[0m'
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+NC='\033[0m'
 
 APP_NAME="$CATAPULT_APP_NAME"
 SLUG="$CATAPULT_APP_SLUG"
@@ -48,7 +51,7 @@ fi
 
 HOMEBREW_TAP_URL="${HOMEBREW_TAP_URL:-https://github.com/Homebrew/homebrew-cask.git}"
 HOMEBREW_REPO=$(echo "$HOMEBREW_TAP_URL" | sed 's|https://github.com/||' | sed 's|\.git$||')
-TAP_NAME=$(echo "$HOMEBREW_REPO" | sed 's|/homebrew-|/|')
+TAP_NAME="${HOMEBREW_REPO/\/homebrew-//}"
 CASK_FILE="Casks/${BREW_NAME:0:1}/${BREW_NAME}.rb"
 
 VERSION="$(catapult_version "${ARGS[0]:-}")"
@@ -105,7 +108,7 @@ echo "📝 Updating cask file..."
 mkdir -p "$(dirname "$CASK_FILE")"
 sed -e "s|{{VERSION}}|${VERSION}|g" \
     -e "s|{{SHA256}}|${SHA256}|g" \
-    "$CASK_TEMPLATE" > "$CASK_FILE"
+    "$CASK_TEMPLATE" >"$CASK_FILE"
 echo ""
 
 git --no-pager diff "$CASK_FILE"
@@ -127,7 +130,7 @@ cleanup() {
 trap cleanup EXIT
 
 echo "🧪 Testing cask..."
-rm -f ~/Library/Caches/Homebrew/downloads/*${APP_NAME}*
+rm -f ~/Library/Caches/Homebrew/downloads/*"${APP_NAME}"*
 # Remembered so cleanup can restore it; the tap is repointed at the temp clone so
 # audit and fetch test the cask about to be proposed, not the published one.
 PREVIOUS_TAP_URL=$(git -C "$(brew --repository "$TAP_NAME" 2>/dev/null)" remote get-url origin 2>/dev/null || echo "")
@@ -141,6 +144,7 @@ if ! git diff --quiet "$CASK_FILE"; then
     git commit --amend --no-edit
 fi
 
+# shellcheck disable=SC2086 # AUDIT_FLAGS holds several flags
 brew audit ${AUDIT_FLAGS:-} "$TAP_CASK"
 # fetch rather than install: this downloads the artifact and verifies its checksum,
 # which is what varies per release, without replacing the app on the machine cutting

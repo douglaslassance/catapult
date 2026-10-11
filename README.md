@@ -357,3 +357,16 @@ should already be in your keychain and `~/Library/MobileDevice/Provisioning Prof
 - For Tauri desktop apps: Rust and the app's package manager on every host, Git
   Bash and `signtool` on Windows, and Tauri's Linux build dependencies
   (WebKitGTK 4.1 and friends) on Linux
+
+## Working on catapult
+
+Pull requests run [ci.yml](.github/workflows/ci.yml): shellcheck, shfmt,
+ruff, actionlint, and a smoke test that loads the example config. To run the
+same checks before pushing:
+
+```sh
+shellcheck -x ./*.sh
+shfmt --diff ./*.sh            # settings come from .editorconfig; -w to fix
+ruff check . && ruff format --check .
+actionlint
+```

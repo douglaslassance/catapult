@@ -63,7 +63,7 @@ cd "$CATAPULT_APP_ROOT"
 
 # Mirror build_ios.sh so we look up the build it actually uploaded.
 [ "$VERSION" = "0.0.0" ] && VERSION=""
-[ -z "$VERSION" ] && VERSION="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+VERSION="$(catapult_version "$VERSION")"
 [ -z "$BUILD_NUMBER" ] && BUILD_NUMBER="$(git log -1 --format=%ct 2>/dev/null || echo 1)"
 
 # "What to Test" from the commits in this release. Prefer the range between the
@@ -73,9 +73,10 @@ if [ -z "$NOTES_FILE" ]; then
     trap 'rm -f "$NOTES_FILE"' EXIT
 
     RANGE=""
-    if [ -n "$VERSION" ] && git rev-parse -q --verify "refs/tags/${VERSION}" >/dev/null; then
-        PREV_TAG="$(git describe --tags --abbrev=0 "${VERSION}^" 2>/dev/null || true)"
-        [ -n "$PREV_TAG" ] && RANGE="${PREV_TAG}..${VERSION}"
+    TAG="${CATAPULT_APP_TAG_PREFIX}${VERSION}"
+    if [ -n "$VERSION" ] && git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+        PREV_TAG="$(catapult_latest_tag "${TAG}^" || true)"
+        [ -n "$PREV_TAG" ] && RANGE="${PREV_TAG}..${TAG}"
     fi
 
     if [ -n "$RANGE" ]; then

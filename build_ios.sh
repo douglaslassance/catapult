@@ -38,7 +38,7 @@ cd "$CATAPULT_APP_ROOT"
 # MARKETING_VERSION stand rather than downgrading the app to 0.0.0.
 VERSION="${1:-}"
 [ "$VERSION" = "0.0.0" ] && VERSION=""
-[ -z "$VERSION" ] && VERSION="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+VERSION="$(catapult_version "$VERSION")"
 # Monotonic build number. App Store Connect requires each upload for a given
 # marketing version to have a unique, increasing CFBundleVersion; the latest
 # commit's Unix timestamp gives us exactly that without any state to track, and

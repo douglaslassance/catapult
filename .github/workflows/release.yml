@@ -30,6 +30,11 @@ on:
         required: false
         type: string
         default: "s3,homebrew"
+      target:
+        description: "Which of catapult.toml's [targets] to release, when it has several"
+        required: false
+        type: string
+        default: ""
       platform:
         description: "Target platform: macos (default), ios, or desktop (Compose or Tauri on macOS, Windows and Linux)"
         required: false
@@ -100,6 +105,9 @@ on:
       WINDOWS_CERTIFICATE_PASSWORD:
         required: false
 
+env:
+  CATAPULT_TARGET: ${{ inputs.target }}
+
 jobs:
   build-s3:
     if: contains(inputs.channels, 's3') && inputs.platform != 'desktop'
@@ -115,10 +123,9 @@ jobs:
         run: |
           V="${{ inputs.version }}"
           if [ -z "$V" ]; then
+            # Otherwise release.sh picks the latest of this app's tags.
             if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
               V="${GITHUB_REF#refs/tags/}"
-            else
-              V="$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.0)"
             fi
           fi
           echo "version=$V" >> "$GITHUB_OUTPUT"
@@ -197,10 +204,9 @@ jobs:
         run: |
           V="${{ inputs.version }}"
           if [ -z "$V" ]; then
+            # Otherwise release.sh picks the latest of this app's tags.
             if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
               V="${GITHUB_REF#refs/tags/}"
-            else
-              V="$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.0)"
             fi
           fi
           echo "version=$V" >> "$GITHUB_OUTPUT"
@@ -325,10 +331,9 @@ jobs:
         run: |
           V="${{ inputs.version }}"
           if [ -z "$V" ]; then
+            # Otherwise release.sh picks the latest of this app's tags.
             if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
               V="${GITHUB_REF#refs/tags/}"
-            else
-              V="$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.0)"
             fi
           fi
           echo "version=$V" >> "$GITHUB_OUTPUT"
@@ -375,10 +380,9 @@ jobs:
         run: |
           V="${{ inputs.version }}"
           if [ -z "$V" ]; then
+            # Otherwise release.sh picks the latest of this app's tags.
             if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
               V="${GITHUB_REF#refs/tags/}"
-            else
-              V="$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.0)"
             fi
           fi
           echo "version=$V" >> "$GITHUB_OUTPUT"
@@ -403,10 +407,9 @@ jobs:
         run: |
           V="${{ inputs.version }}"
           if [ -z "$V" ]; then
+            # Otherwise release.sh picks the latest of this app's tags.
             if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
               V="${GITHUB_REF#refs/tags/}"
-            else
-              V="$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.0)"
             fi
           fi
           echo "version=$V" >> "$GITHUB_OUTPUT"
@@ -464,10 +467,9 @@ jobs:
         run: |
           V="${{ inputs.version }}"
           if [ -z "$V" ]; then
+            # Otherwise release.sh picks the latest of this app's tags.
             if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
               V="${GITHUB_REF#refs/tags/}"
-            else
-              V="$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.0)"
             fi
           fi
           echo "version=$V" >> "$GITHUB_OUTPUT"

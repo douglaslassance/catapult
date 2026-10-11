@@ -25,7 +25,7 @@ fi
 
 cd "$CATAPULT_APP_ROOT"
 
-VERSION="$1"
+VERSION="$(catapult_version "$1")"
 shift
 FRAGMENTS=("$@")
 SLUG="$CATAPULT_APP_SLUG"

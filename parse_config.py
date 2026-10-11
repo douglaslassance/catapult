@@ -7,9 +7,12 @@ Output convention:
     on channel presence (e.g. [sparkle], [s3], [homebrew], [appstore]).
   - Nested dicts under [plist.usage_descriptions] are intentionally skipped
     here; render_plist.py reads the TOML directly for that.
+  - A config with [targets.<name>] tables describes several apps in one repo.
+    CATAPULT_TARGET picks one, and its tables are merged over the shared ones.
 
 Requires Python 3.11+ (tomllib).
 """
+import os
 import sys
 import shlex
 
@@ -41,17 +44,47 @@ def flatten(d, prefix=()):
             yield path, str(v)
 
 
-def main():
-    path = sys.argv[1] if len(sys.argv) > 1 else "catapult.toml"
+def merge(base, override):
+    merged = dict(base)
+    for k, v in override.items():
+        if isinstance(v, dict) and isinstance(merged.get(k), dict):
+            merged[k] = merge(merged[k], v)
+        else:
+            merged[k] = v
+    return merged
+
+
+def fail(message):
+    sys.stderr.write(f"catapult: {message}\n")
+    sys.exit(1)
+
+
+def load_config(path, target=None):
+    """The config at path, with the target's tables merged over the shared ones."""
     try:
         with open(path, "rb") as f:
             cfg = tomllib.load(f)
     except FileNotFoundError:
-        sys.stderr.write(f"catapult: {path} not found\n")
-        sys.exit(1)
+        fail(f"{path} not found")
     except tomllib.TOMLDecodeError as e:
-        sys.stderr.write(f"catapult: invalid TOML in {path}: {e}\n")
-        sys.exit(1)
+        fail(f"invalid TOML in {path}: {e}")
+
+    targets = cfg.pop("targets", None)
+    if targets is None:
+        if target:
+            fail(f"{path} has no [targets], so there is no target {target!r}")
+        return cfg
+    names = ", ".join(targets)
+    if not target:
+        fail(f"{path} has several targets ({names}); pass --target or set CATAPULT_TARGET")
+    if target not in targets:
+        fail(f"{path} has no target {target!r} (it has {names})")
+    return merge(cfg, targets[target])
+
+
+def main():
+    path = sys.argv[1] if len(sys.argv) > 1 else "catapult.toml"
+    cfg = load_config(path, os.environ.get("CATAPULT_TARGET"))
 
     # Windows Python writes CRLF in the ANSI code page, and bash would eval the stray \r into every value.
     sys.stdout.reconfigure(encoding="utf-8", newline="\n")

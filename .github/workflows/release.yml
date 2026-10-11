@@ -30,6 +30,11 @@ on:
         required: false
         type: string
         default: "s3,homebrew"
+      target:
+        description: "Which of catapult.toml's [targets] to release, when it has several"
+        required: false
+        type: string
+        default: ""
       platform:
         description: "Target platform: macos (default), ios, or desktop (Compose or Tauri on macOS, Windows and Linux)"
         required: false
@@ -99,6 +104,9 @@ on:
         required: false
       WINDOWS_CERTIFICATE_PASSWORD:
         required: false
+
+env:
+  CATAPULT_TARGET: ${{ inputs.target }}
 
 jobs:
   build-s3:

@@ -12,6 +12,7 @@ description = "Short tagline"              # used in Homebrew cask `desc`
 category    = "public.app-category.productivity"
 min_macos   = "13.0"
 # tag_prefix = "desktop-"                   # only tags with this prefix are releases
+# path       = "desktop"                    # app folder beside catapult.toml; for [targets], see README
 
 [build]
 kind          = "swift"                    # "swift" (default) or "tauri"

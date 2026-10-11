@@ -1,5 +1,6 @@
 #!/bin/bash
-# Loads catapult.toml from the current working directory into CATAPULT_* env vars.
+# Loads catapult.toml from the current working directory into CATAPULT_* env vars,
+# and moves into the app root.
 # Source this from any sibling script as:
 #   source "$(dirname "$0")/config.sh"
 #
@@ -11,21 +12,24 @@ set -e
 CATAPULT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # App repo root = current working directory. All paths in catapult.toml are
-# resolved relative to it.
+# resolved relative to it, or to the target's app.path when it has [targets].
 CATAPULT_APP_ROOT="${CATAPULT_APP_ROOT:-$(pwd)}"
 CATAPULT_CONFIG="${CATAPULT_CONFIG:-${CATAPULT_APP_ROOT}/catapult.toml}"
-
-# Optional .env for local secrets. `set -a` auto-exports every assignment so
-# subprocesses (notably python helpers like render_plist.py) see the values.
-if [ -f "${CATAPULT_APP_ROOT}/.env" ]; then
-    set -a
-    source "${CATAPULT_APP_ROOT}/.env"
-    set +a
-fi
 
 if [ ! -f "$CATAPULT_CONFIG" ]; then
     echo "❌ catapult: $CATAPULT_CONFIG not found" >&2
     exit 1
+fi
+CATAPULT_CONFIG="$(cd "$(dirname "$CATAPULT_CONFIG")" && pwd)/$(basename "$CATAPULT_CONFIG")"
+CATAPULT_CONFIG_DIR="$(dirname "$CATAPULT_CONFIG")"
+
+# Optional .env beside catapult.toml for local secrets. `set -a` auto-exports
+# every assignment so subprocesses (notably python helpers like
+# render_plist.py) see the values.
+if [ -f "${CATAPULT_CONFIG_DIR}/.env" ]; then
+    set -a
+    source "${CATAPULT_CONFIG_DIR}/.env"
+    set +a
 fi
 
 # The OS this runs on. Desktop builds can only produce artifacts for it.
@@ -47,8 +51,15 @@ if [ -z "${CATAPULT_PYTHON:-}" ]; then
 fi
 export CATAPULT_PYTHON
 
-# Load TOML into env
-eval "$("$CATAPULT_PYTHON" "${CATAPULT_DIR}/parse_config.py" "$CATAPULT_CONFIG")"
+# Load TOML into env. CATAPULT_TARGET picks one of its [targets], if any.
+CATAPULT_EXPORTS="$("$CATAPULT_PYTHON" "${CATAPULT_DIR}/parse_config.py" "$CATAPULT_CONFIG")" || exit 1
+eval "$CATAPULT_EXPORTS"
+
+if [ -n "${CATAPULT_APP_PATH:-}" ]; then
+    CATAPULT_APP_ROOT="${CATAPULT_CONFIG_DIR}/${CATAPULT_APP_PATH}"
+fi
+cd "$CATAPULT_APP_ROOT"
+export CATAPULT_APP_ROOT CATAPULT_CONFIG CATAPULT_TARGET
 
 # Required for any kind/platform. On Android, bundle_id is the applicationId.
 : "${CATAPULT_APP_NAME:?app.name required in catapult.toml}"

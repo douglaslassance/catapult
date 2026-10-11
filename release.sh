@@ -5,9 +5,10 @@
 # build_appstore → verify_appstore → upload_appstore). Used both locally and
 # inside the catapult CD workflow so the two paths stay identical.
 #
-# Usage:   release.sh [version] [--channels s3,homebrew,appstore,play] [--no-testflight]
+# Usage:   release.sh [version] [--target name] [--channels s3,homebrew,appstore,play] [--no-testflight]
 # Version: defaults to latest git tag, or 0.0.0. A full tag works too, and with
 #          app.tag_prefix set only that app's tags count.
+# Target:  which of catapult.toml's [targets] to release, when it has several.
 # Channels: defaults to "s3,homebrew" on macOS (App Store opt-in), "appstore"
 # on iOS, and "play" on Android. An app that lists several build.platforms
 # releases each of them under the same version, e.g. "appstore,play" for a
@@ -24,7 +25,7 @@
 # CD workflow handles certificate import as a prelude step.
 
 if [[ "$1" == "-h" || "$1" == "--help" ]]; then
-    sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'
     exit 0
 fi
 
@@ -38,6 +39,8 @@ TESTFLIGHT=1
 
 while [ $# -gt 0 ]; do
     case "$1" in
+        --target) export CATAPULT_TARGET="$2"; shift 2 ;;
+        --target=*) export CATAPULT_TARGET="${1#*=}"; shift ;;
         --channels) CHANNELS="$2"; shift 2 ;;
         --channels=*) CHANNELS="${1#*=}"; shift ;;
         --no-testflight) TESTFLIGHT=0; shift ;;

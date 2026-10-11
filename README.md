@@ -204,7 +204,7 @@ Individual scripts are also available if you need to run just one step:
 ./catapult/push_homebrew.sh        # update tap, optionally --pull-request
 ```
 
-All scripts source `.env` from the app root for local secrets.
+All scripts source `.env` from beside `catapult.toml` for local secrets.
 
 > **Sparkle parity.** Declaring `[sparkle]` in `catapult.toml` enables embedding
 > + signing in the direct build, but you must also `import Sparkle` in your
@@ -234,6 +234,41 @@ jobs:
 ```
 
 When bumping the submodule SHA, update the `uses:` line to match.
+
+For a repo with several targets, pass `target: "desktop"` and trigger on that
+target's tags, as in `tags: ['desktop-*.*.*']`.
+
+### Several apps in one repo
+
+One `catapult.toml` can release several apps, say a Mac app and an iOS app that
+share a name and bundle ID. Shared settings stay at the top level, and each app
+gets a `[targets.<name>]` holding the same tables, which win over the shared ones.
+
+```toml
+[app]
+name      = "MyApp"
+bundle_id = "com.example.myapp"
+
+[targets.desktop.app]
+path       = "desktop"        # the app's folder, beside catapult.toml
+tag_prefix = "desktop-"
+
+[targets.desktop.build]
+arch = "arm64"
+
+[targets.mobile.app]
+path       = "mobile"
+tag_prefix = "mobile-"
+
+[targets.mobile.build]
+kind     = "xcodeproj"
+platform = "ios"
+```
+
+`./catapult/release.sh --target desktop` (or `CATAPULT_TARGET=desktop`) runs
+from the target's folder, so its paths resolve there. Only tags with its prefix
+count as its releases, and the prefix is dropped from the version, so
+`desktop-1.2.3` ships as 1.2.3. `.env` stays beside `catapult.toml`.
 
 ### Scope: release, not CI
 

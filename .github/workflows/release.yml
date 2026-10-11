@@ -3,7 +3,8 @@ name: Release (catapult)
 # Reusable release workflow. Apps invoke this from their own .github/workflows/
 # with `uses: douglaslassance/catapult/.github/workflows/release.yml@<tag>`.
 #
-# The calling workflow must `secrets: inherit` (or pass each secret explicitly).
+# The calling workflow must `secrets: inherit` when it shares this repo's owner,
+# and pass each secret explicitly otherwise.
 #
 # Each job runs `catapult/release.sh --channels <one>` after importing the
 # certificates it needs. The script is the same one used locally — the only
@@ -38,6 +39,66 @@ on:
         required: false
         type: string
         default: "macos-15"
+    # Declared so a caller in another account or organization can pass them, which `secrets: inherit` cannot.
+    secrets:
+      APPLE_DEVELOPER_CERT:
+        required: false
+      APPLE_DEVELOPER_CERT_PASSWORD:
+        required: false
+      APPLE_SIGNING_IDENTITY:
+        required: false
+      APPSTORE_CERT:
+        required: false
+      APPSTORE_CERT_PASSWORD:
+        required: false
+      CLOUDFLARE_API_TOKEN:
+        required: false
+      CLOUDFLARE_KV_NAMESPACE_ID:
+        required: false
+      CLOUDFLARE_ZONE_ID:
+        required: false
+      HOMEBREW_TAP_ACCESS_TOKEN:
+        required: false
+      HOMEBREW_TAP_URL:
+        required: false
+      INSTALLER_CERT:
+        required: false
+      INSTALLER_CERT_PASSWORD:
+        required: false
+      NOTARIZATION_ISSUER_ID:
+        required: false
+      NOTARIZATION_KEY:
+        required: false
+      NOTARIZATION_KEY_ID:
+        required: false
+      PROVISIONING_PROFILE_B64:
+        required: false
+      RELEASE_API_TOKEN:
+        required: false
+      RELEASE_API_URL:
+        required: false
+      S3_ACCESS_KEY_ID:
+        required: false
+      S3_ACCOUNT_ID:
+        required: false
+      S3_BUCKET_NAME:
+        required: false
+      S3_PUBLIC_URL:
+        required: false
+      S3_SECRET_ACCESS_KEY:
+        required: false
+      SPARKLE_PRIVATE_KEY:
+        required: false
+      SPARKLE_PUBLIC_KEY:
+        required: false
+      TAURI_SIGNING_PRIVATE_KEY:
+        required: false
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD:
+        required: false
+      WINDOWS_CERTIFICATE:
+        required: false
+      WINDOWS_CERTIFICATE_PASSWORD:
+        required: false
 
 jobs:
   build-s3:

@@ -16,6 +16,11 @@ name: Release (catapult)
 # Windows and Linux, since neither jpackage nor Tauri bundles for another OS.
 # Each Tauri leg writes its part of the updater manifest, and updater-manifest
 # merges them into one upload once every leg succeeded.
+#
+# With `platform: android`, play builds the bundle on Linux and publishes it to
+# Google Play. `platform: mobile` (a Tauri app on iOS and Android) runs
+# appstore-ios and play side by side under one version, given
+# `channels: "appstore,play"`.
 
 on:
   workflow_call:
@@ -26,7 +31,7 @@ on:
         type: string
         default: ""
       channels:
-        description: "Comma-separated channels to run: s3,homebrew,appstore"
+        description: "Comma-separated channels to run: s3,homebrew,appstore,play"
         required: false
         type: string
         default: "s3,homebrew"
@@ -36,7 +41,7 @@ on:
         type: string
         default: ""
       platform:
-        description: "Target platform: macos (default), ios, or desktop (Compose or Tauri on macOS, Windows and Linux)"
+        description: "Target platform: macos (default), ios, android, mobile (Tauri on iOS and Android), or desktop (Compose or Tauri on macOS, Windows and Linux)"
         required: false
         type: string
         default: "macos"
@@ -46,6 +51,14 @@ on:
         default: "macos-15"
     # Declared so a caller in another account or organization can pass them, which `secrets: inherit` cannot.
     secrets:
+      ANDROID_KEY_ALIAS:
+        required: false
+      ANDROID_KEY_PASSWORD:
+        required: false
+      ANDROID_KEYSTORE:
+        required: false
+      ANDROID_KEYSTORE_PASSWORD:
+        required: false
       APPLE_DEVELOPER_CERT:
         required: false
       APPLE_DEVELOPER_CERT_PASSWORD:
@@ -73,6 +86,8 @@ on:
       NOTARIZATION_KEY:
         required: false
       NOTARIZATION_KEY_ID:
+        required: false
+      PLAY_SERVICE_ACCOUNT_JSON:
         required: false
       PROVISIONING_PROFILE_B64:
         required: false
@@ -463,7 +478,7 @@ jobs:
         run: ./catapult/release.sh "${{ steps.ver.outputs.version }}" --channels appstore
 
   appstore-ios:
-    if: contains(inputs.channels, 'appstore') && inputs.platform == 'ios'
+    if: contains(inputs.channels, 'appstore') && (inputs.platform == 'ios' || inputs.platform == 'mobile')
     name: Build + upload (iOS App Store / TestFlight)
     runs-on: ${{ inputs.runner }}
     steps:
@@ -525,3 +540,81 @@ jobs:
           NOTARIZATION_KEY_ID: ${{ secrets.NOTARIZATION_KEY_ID }}
           NOTARIZATION_ISSUER_ID: ${{ secrets.NOTARIZATION_ISSUER_ID }}
         run: ./catapult/release.sh "${{ steps.ver.outputs.version }}" --channels appstore
+
+  play:
+    if: contains(inputs.channels, 'play') && (inputs.platform == 'android' || inputs.platform == 'mobile')
+    name: Build + upload (Google Play)
+    runs-on: ubuntu-24.04
+    steps:
+      # The release notes list the commits since the previous tag.
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Resolve version
+        id: ver
+        run: |
+          V="${{ inputs.version }}"
+          if [ -z "$V" ]; then
+            # Otherwise release.sh picks the latest of this app's tags.
+            if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+              V="${GITHUB_REF#refs/tags/}"
+            fi
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      - name: Read the config
+        id: cfg
+        run: |
+          eval "$(python3 catapult/parse_config.py catapult.toml)"
+          {
+            echo "kind=${CATAPULT_BUILD_KIND:-swift}"
+            echo "package_manager=${CATAPULT_BUILD_PACKAGE_MANAGER:-npm}"
+          } >>"$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # tauri android build bundles every Android ABI.
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.cfg.outputs.kind == 'tauri'
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - uses: oven-sh/setup-bun@v2
+        if: steps.cfg.outputs.kind == 'tauri' && steps.cfg.outputs.package_manager == 'bun'
+
+      - name: Enable pnpm and yarn
+        if: steps.cfg.outputs.kind == 'tauri' && (steps.cfg.outputs.package_manager == 'pnpm' || steps.cfg.outputs.package_manager == 'yarn')
+        run: corepack enable
+
+      # The app's Gradle config signs with keystore.properties beside catapult.toml, as it does locally.
+      - name: Write the upload keystore
+        env:
+          ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE" ]; then
+            echo "ANDROID_KEYSTORE is not set, so the bundle is signed however the app's Gradle config decides."
+            exit 0
+          fi
+          KEYSTORE="${RUNNER_TEMP}/upload.jks"
+          echo "$ANDROID_KEYSTORE" | base64 --decode >"$KEYSTORE"
+          {
+            echo "storeFile=${KEYSTORE}"
+            echo "storePassword=${ANDROID_KEYSTORE_PASSWORD}"
+            echo "keyAlias=${ANDROID_KEY_ALIAS}"
+            echo "keyPassword=${ANDROID_KEY_PASSWORD}"
+          } >keystore.properties
+
+      - name: Build + upload Google Play
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: ./catapult/release.sh "${{ steps.ver.outputs.version }}" --channels play

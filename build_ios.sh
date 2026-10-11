@@ -83,7 +83,7 @@ if [ "$CATAPULT_BUILD_KIND" = "tauri" ]; then
         KEYDIR="${HOME}/.appstoreconnect/private_keys"
         mkdir -p "$KEYDIR"
         export APPLE_API_KEY_PATH="${KEYDIR}/AuthKey_${NOTARIZATION_KEY_ID}.p8"
-        echo "$NOTARIZATION_KEY" | base64 --decode > "$APPLE_API_KEY_PATH"
+        echo "$NOTARIZATION_KEY" | base64 --decode >"$APPLE_API_KEY_PATH"
         export APPLE_API_KEY="$NOTARIZATION_KEY_ID" APPLE_API_ISSUER="$NOTARIZATION_ISSUER_ID"
     fi
 
@@ -92,7 +92,10 @@ if [ "$CATAPULT_BUILD_KIND" = "tauri" ]; then
     echo ""
 
     IPA_SRC="$(ls "${CATAPULT_BUILD_TAURI_DIR}"/gen/apple/build/arm64/*.ipa 2>/dev/null | head -1)"
-    [ -n "$IPA_SRC" ] || { echo "❌ tauri ios build produced no .ipa in ${CATAPULT_BUILD_TAURI_DIR}/gen/apple/build/arm64" >&2; exit 1; }
+    [ -n "$IPA_SRC" ] || {
+        echo "❌ tauri ios build produced no .ipa in ${CATAPULT_BUILD_TAURI_DIR}/gen/apple/build/arm64" >&2
+        exit 1
+    }
     mkdir -p "$EXPORT_DIR"
     cp "$IPA_SRC" "$EXPORT_DIR/"
     echo "📦 IPA: ${EXPORT_DIR}/$(basename "$IPA_SRC")"
@@ -117,12 +120,12 @@ if [ -n "${CI:-}" ] && [ -n "${NOTARIZATION_KEY_ID:-}" ] && [ -n "${NOTARIZATION
     KEYFILE="${KEYDIR}/AuthKey_${NOTARIZATION_KEY_ID}.p8"
     if [ -n "${NOTARIZATION_KEY:-}" ]; then
         mkdir -p "$KEYDIR"
-        echo "$NOTARIZATION_KEY" | base64 --decode > "$KEYFILE"
+        echo "$NOTARIZATION_KEY" | base64 --decode >"$KEYFILE"
     fi
     if [ -f "$KEYFILE" ]; then
         AUTH_ARGS=(-authenticationKeyPath "$KEYFILE"
-                   -authenticationKeyID "$NOTARIZATION_KEY_ID"
-                   -authenticationKeyIssuerID "$NOTARIZATION_ISSUER_ID")
+            -authenticationKeyID "$NOTARIZATION_KEY_ID"
+            -authenticationKeyIssuerID "$NOTARIZATION_ISSUER_ID")
     fi
 fi
 
@@ -146,7 +149,7 @@ echo ""
 # ExportOptions for App Store Connect distribution. `destination = export`
 # leaves a local .ipa; upload_ios.sh sends it. manageAppVersionAndBuildNumber
 # is false so Xcode keeps the version/build we archived with.
-cat > "$EXPORT_OPTIONS" <<PLIST
+cat >"$EXPORT_OPTIONS" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -177,5 +180,8 @@ xcodebuild -exportArchive \
 echo ""
 
 IPA="$(ls "$EXPORT_DIR"/*.ipa 2>/dev/null | head -1)"
-[ -n "$IPA" ] || { echo "❌ No .ipa produced in ${EXPORT_DIR}" >&2; exit 1; }
+[ -n "$IPA" ] || {
+    echo "❌ No .ipa produced in ${EXPORT_DIR}" >&2
+    exit 1
+}
 echo "📦 IPA: ${IPA}"

@@ -36,7 +36,7 @@ fi
 case "$(uname -s)" in
     Darwin) CATAPULT_HOST_OS=macos ;;
     Linux) CATAPULT_HOST_OS=linux ;;
-    MINGW*|MSYS*|CYGWIN*) CATAPULT_HOST_OS=windows ;;
+    MINGW* | MSYS* | CYGWIN*) CATAPULT_HOST_OS=windows ;;
     *) CATAPULT_HOST_OS=unknown ;;
 esac
 export CATAPULT_HOST_OS
@@ -69,8 +69,11 @@ export CATAPULT_APP_ROOT CATAPULT_CONFIG CATAPULT_TARGET
 # Build kind: "swift" (default), "tauri", "xcodeproj", "gradle", or "compose"
 CATAPULT_BUILD_KIND="${CATAPULT_BUILD_KIND:-swift}"
 case "$CATAPULT_BUILD_KIND" in
-    swift|tauri|xcodeproj|gradle|compose) ;;
-    *) echo "❌ catapult: build.kind must be 'swift', 'tauri', 'xcodeproj', 'gradle', or 'compose' (got '$CATAPULT_BUILD_KIND')" >&2; exit 1 ;;
+    swift | tauri | xcodeproj | gradle | compose) ;;
+    *)
+        echo "❌ catapult: build.kind must be 'swift', 'tauri', 'xcodeproj', 'gradle', or 'compose' (got '$CATAPULT_BUILD_KIND')" >&2
+        exit 1
+        ;;
 esac
 
 # Compose apps build on macOS, Windows and Linux alike, so their platform is "desktop".
@@ -85,14 +88,20 @@ fi
 CATAPULT_BUILD_PLATFORMS="${CATAPULT_BUILD_PLATFORMS:-${CATAPULT_BUILD_PLATFORM:-macos}}"
 for p in $CATAPULT_BUILD_PLATFORMS; do
     case "$p" in
-        macos|ios|android|desktop) ;;
-        *) echo "❌ catapult: build.platform must be 'macos', 'ios', 'android', or 'desktop' (got '$p')" >&2; exit 1 ;;
+        macos | ios | android | desktop) ;;
+        *)
+            echo "❌ catapult: build.platform must be 'macos', 'ios', 'android', or 'desktop' (got '$p')" >&2
+            exit 1
+            ;;
     esac
 done
 if [ -n "${CATAPULT_PLATFORM:-}" ]; then
     case " $CATAPULT_BUILD_PLATFORMS " in
         *" $CATAPULT_PLATFORM "*) CATAPULT_BUILD_PLATFORM="$CATAPULT_PLATFORM" ;;
-        *) echo "❌ catapult: this app does not ship on '$CATAPULT_PLATFORM' (build.platforms: $CATAPULT_BUILD_PLATFORMS)" >&2; exit 1 ;;
+        *)
+            echo "❌ catapult: this app does not ship on '$CATAPULT_PLATFORM' (build.platforms: $CATAPULT_BUILD_PLATFORMS)" >&2
+            exit 1
+            ;;
     esac
 else
     CATAPULT_BUILD_PLATFORM="${CATAPULT_BUILD_PLATFORMS%% *}"
@@ -102,20 +111,25 @@ fi
 # Tauri generates, and ship only via the appstore channel. Android builds go
 # through Gradle, the same way, and ship only via the play channel.
 if [ "$CATAPULT_BUILD_PLATFORM" = "ios" ] && [ "$CATAPULT_BUILD_KIND" != "xcodeproj" ] && [ "$CATAPULT_BUILD_KIND" != "tauri" ]; then
-    echo "❌ catapult: build.platform = 'ios' requires build.kind = 'xcodeproj' or 'tauri'" >&2; exit 1
+    echo "❌ catapult: build.platform = 'ios' requires build.kind = 'xcodeproj' or 'tauri'" >&2
+    exit 1
 fi
 if [ "$CATAPULT_BUILD_PLATFORM" = "android" ] && [ "$CATAPULT_BUILD_KIND" != "gradle" ] && [ "$CATAPULT_BUILD_KIND" != "tauri" ]; then
-    echo "❌ catapult: build.platform = 'android' requires build.kind = 'gradle' or 'tauri'" >&2; exit 1
+    echo "❌ catapult: build.platform = 'android' requires build.kind = 'gradle' or 'tauri'" >&2
+    exit 1
 fi
 if [ "$CATAPULT_BUILD_KIND" = "gradle" ] && [ "$CATAPULT_BUILD_PLATFORM" != "android" ]; then
-    echo "❌ catapult: build.kind = 'gradle' requires build.platform = 'android'" >&2; exit 1
+    echo "❌ catapult: build.kind = 'gradle' requires build.platform = 'android'" >&2
+    exit 1
 fi
 # Desktop builds run once per host (macOS, Windows and Linux). Compose always does, Tauri opts in.
 if [ "$CATAPULT_BUILD_PLATFORM" = "desktop" ] && [ "$CATAPULT_BUILD_KIND" != "compose" ] && [ "$CATAPULT_BUILD_KIND" != "tauri" ]; then
-    echo "❌ catapult: build.platform = 'desktop' requires build.kind = 'compose' or 'tauri'" >&2; exit 1
+    echo "❌ catapult: build.platform = 'desktop' requires build.kind = 'compose' or 'tauri'" >&2
+    exit 1
 fi
 if [ "$CATAPULT_BUILD_KIND" = "compose" ] && [ "$CATAPULT_BUILD_PLATFORM" != "desktop" ]; then
-    echo "❌ catapult: build.kind = 'compose' requires build.platform = 'desktop'" >&2; exit 1
+    echo "❌ catapult: build.kind = 'compose' requires build.platform = 'desktop'" >&2
+    exit 1
 fi
 
 # Apple signing identities are derived from these, so only Apple targets need them (a desktop build is one on a Mac).
@@ -144,8 +158,11 @@ if [ "$CATAPULT_BUILD_KIND" = "tauri" ]; then
     CATAPULT_BUILD_TAURI_DIR="${CATAPULT_BUILD_TAURI_DIR:-src-tauri}"
     CATAPULT_BUILD_FRONTEND_BUILD="${CATAPULT_BUILD_FRONTEND_BUILD:-${CATAPULT_BUILD_PACKAGE_MANAGER} run build}"
     case "$CATAPULT_BUILD_PACKAGE_MANAGER" in
-        npm|pnpm|bun|yarn) ;;
-        *) echo "❌ catapult: build.package_manager must be npm/pnpm/bun/yarn" >&2; exit 1 ;;
+        npm | pnpm | bun | yarn) ;;
+        *)
+            echo "❌ catapult: build.package_manager must be npm/pnpm/bun/yarn" >&2
+            exit 1
+            ;;
     esac
     # The Gradle project `tauri android init` generates writes a universal bundle here.
     if [ "$CATAPULT_BUILD_PLATFORM" = "android" ]; then
@@ -158,7 +175,8 @@ fi
 if [ "$CATAPULT_BUILD_KIND" = "xcodeproj" ]; then
     : "${CATAPULT_BUILD_SCHEME:?build.scheme required for xcodeproj builds}"
     if [ -z "${CATAPULT_BUILD_PROJECT:-}" ] && [ -z "${CATAPULT_BUILD_WORKSPACE:-}" ]; then
-        echo "❌ catapult: build.project or build.workspace required for xcodeproj builds" >&2; exit 1
+        echo "❌ catapult: build.project or build.workspace required for xcodeproj builds" >&2
+        exit 1
     fi
     CATAPULT_BUILD_CONFIGURATION="${CATAPULT_BUILD_CONFIGURATION:-Release}"
 fi
@@ -184,7 +202,10 @@ if [ "$CATAPULT_BUILD_PLATFORM" = "desktop" ]; then
             linux/x86_64) CATAPULT_BUILD_TARGET_TRIPLE="x86_64-unknown-linux-gnu" ;;
             linux/aarch64) CATAPULT_BUILD_TARGET_TRIPLE="aarch64-unknown-linux-gnu" ;;
             windows/x86_64) CATAPULT_BUILD_TARGET_TRIPLE="x86_64-pc-windows-msvc" ;;
-            *) echo "❌ catapult: cannot derive build.target_triple on $(uname -s) $(uname -m); set it in catapult.toml" >&2; exit 1 ;;
+            *)
+                echo "❌ catapult: cannot derive build.target_triple on $(uname -s) $(uname -m); set it in catapult.toml" >&2
+                exit 1
+                ;;
         esac
     fi
     export CATAPULT_BUILD_TARGET_TRIPLE
@@ -229,7 +250,7 @@ export CATAPULT_BUILD_DIR_APPSTORE="${CATAPULT_APP_ROOT}/build-appstore"
 case "$CATAPULT_BUILD_PROVISIONING_PROFILE" in
     /*) ;;
     ~*) CATAPULT_BUILD_PROVISIONING_PROFILE="${CATAPULT_BUILD_PROVISIONING_PROFILE/#\~/$HOME}" ;;
-    *)  CATAPULT_BUILD_PROVISIONING_PROFILE="${HOME}/Library/MobileDevice/Provisioning Profiles/${CATAPULT_BUILD_PROVISIONING_PROFILE}" ;;
+    *) CATAPULT_BUILD_PROVISIONING_PROFILE="${HOME}/Library/MobileDevice/Provisioning Profiles/${CATAPULT_BUILD_PROVISIONING_PROFILE}" ;;
 esac
 export CATAPULT_BUILD_PROVISIONING_PROFILE
 
@@ -243,19 +264,19 @@ export CATAPULT_BUILD_PACKAGE_MANAGER CATAPULT_BUILD_TAURI_DIR CATAPULT_BUILD_FR
 # Runs the app's Tauri CLI through its package manager.
 catapult_tauri() {
     case "$CATAPULT_BUILD_PACKAGE_MANAGER" in
-        bun)  bun run tauri "$@" ;;
+        bun) bun run tauri "$@" ;;
         pnpm) pnpm tauri "$@" ;;
         yarn) yarn tauri "$@" ;;
-        npm)  npm run tauri -- "$@" ;;
+        npm) npm run tauri -- "$@" ;;
     esac
 }
 
 catapult_install_dependencies() {
     case "$CATAPULT_BUILD_PACKAGE_MANAGER" in
-        bun)  bun install ;;
+        bun) bun install ;;
         pnpm) pnpm install ;;
         yarn) yarn install ;;
-        npm)  npm install ;;
+        npm) npm install ;;
     esac
 }
 
@@ -263,9 +284,9 @@ catapult_install_dependencies() {
 catapult_checksum() {
     local file="$1"
     if command -v shasum >/dev/null 2>&1; then
-        shasum -a 256 "$file" > "${file}.sha256"
+        shasum -a 256 "$file" >"${file}.sha256"
     else
-        sha256sum "$file" > "${file}.sha256"
+        sha256sum "$file" >"${file}.sha256"
     fi
     cat "${file}.sha256"
 }
@@ -279,7 +300,7 @@ catapult_make_dmg() {
     mount="/tmp/${CATAPULT_APP_SLUG}-dmg-$$"
     temp="/tmp/${CATAPULT_APP_SLUG}-temp-$$.dmg"
     # A bundled runtime can run to hundreds of MB, so the image is sized from the app plus HFS+ headroom.
-    size_mb=$(( $(du -sm "$app" | cut -f1) * 6 / 5 + 50 ))
+    size_mb=$(($(du -sm "$app" | cut -f1) * 6 / 5 + 50))
     mkdir -p "$mount"
     hdiutil create -size "${size_mb}m" -fs HFS+ -volname "$volname" "$temp" -quiet
     hdiutil attach "$temp" -nobrowse -noverify -noautoopen -mountpoint "$mount" -quiet
@@ -310,7 +331,7 @@ catapult_notarize() {
 
     echo "📝 Submitting for notarization..."
     key_file=$(mktemp /tmp/notarization_XXXXXX)
-    echo "$NOTARIZATION_KEY" | base64 --decode > "$key_file"
+    echo "$NOTARIZATION_KEY" | base64 --decode >"$key_file"
 
     submit_output=$(xcrun notarytool submit "$dmg" \
         --key "$key_file" \
@@ -375,7 +396,7 @@ catapult_sign_msi() {
     fi
     pfx_dir="$(mktemp -d)"
     pfx="${pfx_dir}/certificate.pfx"
-    echo "$WINDOWS_CERTIFICATE" | base64 --decode > "$pfx"
+    echo "$WINDOWS_CERTIFICATE" | base64 --decode >"$pfx"
     # Git Bash would rewrite signtool's /flags as paths, so conversion is off and the paths are converted by hand.
     if ! MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' "$signtool" sign /fd sha256 \
         /f "$(cygpath -w "$pfx")" /p "$WINDOWS_CERTIFICATE_PASSWORD" \

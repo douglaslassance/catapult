@@ -36,10 +36,22 @@ EXTRA=()
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        --notes-file) NOTES_FILE="$2"; shift 2 ;;
-        --notes-file=*) NOTES_FILE="${1#*=}"; shift ;;
-        --dry-run) EXTRA+=(--dry-run); shift ;;
-        *) VERSION="$1"; shift ;;
+        --notes-file)
+            NOTES_FILE="$2"
+            shift 2
+            ;;
+        --notes-file=*)
+            NOTES_FILE="${1#*=}"
+            shift
+            ;;
+        --dry-run)
+            EXTRA+=(--dry-run)
+            shift
+            ;;
+        *)
+            VERSION="$1"
+            shift
+            ;;
     esac
 done
 
@@ -70,12 +82,12 @@ if [ -z "$NOTES_FILE" ]; then
     fi
 
     if [ -n "$RANGE" ]; then
-        git log "$RANGE" --no-merges --format='- %s' > "$NOTES_FILE"
+        git log "$RANGE" --no-merges --format='- %s' >"$NOTES_FILE"
     else
-        git log -20 --no-merges --format='- %s' > "$NOTES_FILE"
+        git log -20 --no-merges --format='- %s' >"$NOTES_FILE"
     fi
 
-    grep -v -i -E '^- (Bump|Update) version' "$NOTES_FILE" > "${NOTES_FILE}.filtered" || true
+    grep -v -i -E '^- (Bump|Update) version' "$NOTES_FILE" >"${NOTES_FILE}.filtered" || true
     mv "${NOTES_FILE}.filtered" "$NOTES_FILE"
 fi
 

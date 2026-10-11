@@ -40,7 +40,10 @@ echo ""
 # Clean (codesign artifacts can be read-only)
 if [ -e "${BUILD_DIR}" ]; then
     chmod -R u+w "${BUILD_DIR}" 2>/dev/null || true
-    rm -rf "${BUILD_DIR}" 2>/dev/null || { echo "❌ Could not clean ${BUILD_DIR} (try: sudo rm -rf ${BUILD_DIR})"; exit 1; }
+    rm -rf "${BUILD_DIR}" 2>/dev/null || {
+        echo "❌ Could not clean ${BUILD_DIR} (try: sudo rm -rf ${BUILD_DIR})"
+        exit 1
+    }
 fi
 mkdir -p "${DIST_DIR}"
 
@@ -73,7 +76,10 @@ echo "📱 Creating app bundle..."
 mkdir -p "${APP_PATH}/Contents/MacOS" "${APP_PATH}/Contents/Resources"
 
 BINARY=".build/release/${CATAPULT_BUILD_EXECUTABLE}"
-[ -f "$BINARY" ] || { echo "❌ Binary not found: $BINARY"; exit 1; }
+[ -f "$BINARY" ] || {
+    echo "❌ Binary not found: $BINARY"
+    exit 1
+}
 
 cp "$BINARY" "${APP_PATH}/Contents/MacOS/${APP_NAME}"
 chmod +x "${APP_PATH}/Contents/MacOS/${APP_NAME}"
@@ -104,7 +110,7 @@ fi
     --kind appstore --version "$VERSION" --build-number "$BUILD_NUMBER" \
     --out "${APP_PATH}/Contents/Info.plist"
 
-echo "APPL????" > "${APP_PATH}/Contents/PkgInfo"
+echo "APPL????" >"${APP_PATH}/Contents/PkgInfo"
 
 if [ "$HAS_BUNDLE" = "1" ]; then
     "$CATAPULT_PYTHON" "${SCRIPT_DIR}/render_plist.py" "$CATAPULT_CONFIG" \

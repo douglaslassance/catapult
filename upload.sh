@@ -68,12 +68,12 @@ missing=()
 [[ -z ${S3_ACCESS_KEY_ID:-} ]] && missing+=("S3_ACCESS_KEY_ID")
 [[ -z ${S3_SECRET_ACCESS_KEY:-} ]] && missing+=("S3_SECRET_ACCESS_KEY")
 [[ -z ${S3_BUCKET_NAME:-} ]] && missing+=("S3_BUCKET_NAME")
-if (( ${#missing[@]} )); then
+if ((${#missing[@]})); then
     echo "❌ Missing env vars: ${missing[*]}"
     exit 1
 fi
 
-if ! command -v aws &> /dev/null; then
+if ! command -v aws &>/dev/null; then
     echo "📦 Installing AWS CLI..."
     brew install awscli
 fi
@@ -202,7 +202,10 @@ if [ "$CATAPULT_BUILD_KIND" = "tauri" ]; then
             *-apple-darwin) TAURI_OS=darwin ;;
             *-windows-*) TAURI_OS=windows ;;
             *-linux-*) TAURI_OS=linux ;;
-            *) echo "❌ No Tauri updater platform for ${TARGET}"; exit 1 ;;
+            *)
+                echo "❌ No Tauri updater platform for ${TARGET}"
+                exit 1
+                ;;
         esac
         TAURI_PLATFORM="${TAURI_OS}-${TARGET%%-*}"
         UPDATER_FRAGMENT="${DIST_DIR}/${BASENAME}.updater.json"
@@ -212,7 +215,7 @@ if [ "$CATAPULT_BUILD_KIND" = "tauri" ]; then
             FILE="${BASENAME}.${BUNDLE%%:*}"
             [ -f "${DIST_DIR}/${FILE}.sig" ] || continue
             # Straight to the bucket, since the API's download route serves one extension per target.
-            UPDATER_ENTRIES+="${TAURI_PLATFORM}${BUNDLE#*:}"$'\t'"${S3_PUBLIC_URL}/${BUCKET_PREFIX}/${FILE}"$'\t'"$(tr -d '\r\n' < "${DIST_DIR}/${FILE}.sig")"$'\n'
+            UPDATER_ENTRIES+="${TAURI_PLATFORM}${BUNDLE#*:}"$'\t'"${S3_PUBLIC_URL}/${BUCKET_PREFIX}/${FILE}"$'\t'"$(tr -d '\r\n' <"${DIST_DIR}/${FILE}.sig")"$'\n'
             if [[ " ${ARTIFACTS[*]} " != *" ${FILE} "* ]]; then
                 UPDATER_UPLOADS+=("$FILE")
             fi
@@ -249,7 +252,7 @@ for line in sys.stdin.read().splitlines():
     key, url, signature = line.split("\t")
     platforms[key] = {"signature": signature, "url": url}
 print(json.dumps({"version": sys.argv[1], "platforms": platforms}, indent=2))
-' "$VERSION" > "$UPDATER_FRAGMENT"
+' "$VERSION" >"$UPDATER_FRAGMENT"
             echo "✅ ${UPDATER_FRAGMENT##*/} written"
             echo ""
 

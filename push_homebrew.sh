@@ -168,14 +168,14 @@ fi
 echo ""
 
 if [ "$PULL_REQUEST" = true ]; then
-    echo "📬 Creating pull request..."
     REPO_INFO=$(gh repo view "$HOMEBREW_REPO" --json isFork,parent,defaultBranchRef 2>/dev/null)
     IS_FORK=$(echo "$REPO_INFO" | "$CATAPULT_PYTHON" -c "import json,sys; print(json.load(sys.stdin).get('isFork', False))")
+
+    OWNER=$(echo "$HOMEBREW_REPO" | cut -d/ -f1)
 
     if [ "$IS_FORK" = "True" ]; then
         PARENT_SLUG=$(echo "$REPO_INFO" | "$CATAPULT_PYTHON" -c "import json,sys; print(json.load(sys.stdin)['parent']['nameWithOwner'])")
         PR_BASE=$(gh repo view "$PARENT_SLUG" --json defaultBranchRef -q '.defaultBranchRef.name')
-        OWNER=$(echo "$HOMEBREW_REPO" | cut -d/ -f1)
         PR_REPO="$PARENT_SLUG"
         PR_HEAD="${OWNER}:${BRANCH}"
     else
@@ -192,15 +192,32 @@ if [ "$PULL_REQUEST" = true ]; then
         DMG_URL="(see cask)"
     fi
 
-    gh pr create \
-        --repo "$PR_REPO" \
-        --head "$PR_HEAD" \
-        --base "$PR_BASE" \
-        --title "${BREW_NAME} ${VERSION}" \
-        --body "Updates ${BREW_NAME} to version ${VERSION}.
+    PR_TITLE="${BREW_NAME} ${VERSION}"
+    PR_BODY="Updates ${BREW_NAME} to version ${VERSION}.
 
 - URL: ${DMG_URL}
 - SHA256: ${SHA256}"
+
+    # Releasing a version again force-pushed the branch above, so its open PR already shows the new cask.
+    EXISTING_PR=$(gh pr list --repo "$PR_REPO" --head "$BRANCH" --state open \
+        --json number,headRepositoryOwner \
+        -q ".[] | select(.headRepositoryOwner.login == \"${OWNER}\") | .number" | head -n 1)
+
+    if [ -n "$EXISTING_PR" ]; then
+        echo "📬 Updating pull request #${EXISTING_PR}..."
+        gh api --method PATCH "repos/${PR_REPO}/pulls/${EXISTING_PR}" \
+            -f title="$PR_TITLE" \
+            -f body="$PR_BODY" \
+            --jq .html_url
+    else
+        echo "📬 Creating pull request..."
+        gh pr create \
+            --repo "$PR_REPO" \
+            --head "$PR_HEAD" \
+            --base "$PR_BASE" \
+            --title "$PR_TITLE" \
+            --body "$PR_BODY"
+    fi
 fi
 
 echo -e "${GREEN}🎉 Done!${NC}"

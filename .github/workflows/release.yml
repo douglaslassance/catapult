@@ -167,6 +167,11 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         if: steps.cfg.outputs.kind == 'compose'
 
+      # jpackage builds the .deb with dpkg-deb under fakeroot.
+      - name: Install Debian packaging tools
+        if: steps.cfg.outputs.kind == 'compose' && runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y fakeroot
+
       - uses: dtolnay/rust-toolchain@stable
         if: steps.cfg.outputs.kind == 'tauri'
 

@@ -1,0 +1,7 @@
+root = true
+
+# shfmt reads its flags from here, so the CI check and editors agree.
+[*.sh]
+indent_style = space
+indent_size = 4
+switch_case_indent = true

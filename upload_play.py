@@ -20,6 +20,7 @@ Usage:
                  --notes-file notes.txt [--status completed] [--language en-US]
                  [--dry-run]
 """
+
 import argparse
 import base64
 import json
@@ -54,7 +55,7 @@ def load_service_account() -> dict:
         text = raw if raw.startswith("{") else base64.b64decode(raw).decode()
         account = json.loads(text)
     except Exception as e:
-        raise PlayError(f"PLAY_SERVICE_ACCOUNT_JSON is neither JSON nor base64 JSON: {e}")
+        raise PlayError(f"PLAY_SERVICE_ACCOUNT_JSON is neither JSON nor base64 JSON: {e}") from None
     for field in ("client_email", "private_key"):
         if not account.get(field):
             raise PlayError(f"Service account JSON has no {field}")
@@ -73,7 +74,9 @@ def sign_rs256(message: bytes, private_key_pem: str) -> bytes:
             f.write(private_key_pem)
         result = subprocess.run(
             ["openssl", "dgst", "-sha256", "-sign", key_path],
-            input=message, capture_output=True, check=False,
+            input=message,
+            capture_output=True,
+            check=False,
         )
         if result.returncode != 0:
             raise PlayError(f"openssl could not sign the token: {result.stderr.decode().strip()}")
@@ -86,31 +89,48 @@ def access_token(account: dict) -> str:
     token_uri = account.get("token_uri") or "https://oauth2.googleapis.com/token"
     now = int(time.time())
     header = b64url(json.dumps({"alg": "RS256", "typ": "JWT"}).encode())
-    claims = b64url(json.dumps({
-        "iss": account["client_email"],
-        "scope": SCOPE,
-        "aud": token_uri,
-        "iat": now,
-        "exp": now + 3600,
-    }).encode())
+    claims = b64url(
+        json.dumps(
+            {
+                "iss": account["client_email"],
+                "scope": SCOPE,
+                "aud": token_uri,
+                "iat": now,
+                "exp": now + 3600,
+            }
+        ).encode()
+    )
     signing_input = f"{header}.{claims}".encode()
     assertion = f"{header}.{claims}.{b64url(sign_rs256(signing_input, account['private_key']))}"
-    body = urllib.parse.urlencode({
-        "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
-        "assertion": assertion,
-    }).encode()
+    body = urllib.parse.urlencode(
+        {
+            "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
+            "assertion": assertion,
+        }
+    ).encode()
     request = urllib.request.Request(token_uri, data=body, method="POST")
     request.add_header("Content-Type", "application/x-www-form-urlencoded")
     try:
         with urllib.request.urlopen(request, timeout=60) as response:
             return json.load(response)["access_token"]
     except urllib.error.HTTPError as e:
-        raise PlayError(f"Google rejected the service account: {e.read().decode(errors='replace')}")
+        raise PlayError(
+            f"Google rejected the service account: {e.read().decode(errors='replace')}"
+        ) from None
 
 
-def call(token: str, method: str, url: str, body=None, data: bytes = None,
-         content_type: str = "application/json", timeout: int = 120) -> dict:
-    payload = data if data is not None else (json.dumps(body).encode() if body is not None else None)
+def call(
+    token: str,
+    method: str,
+    url: str,
+    body=None,
+    data: bytes = None,
+    content_type: str = "application/json",
+    timeout: int = 120,
+) -> dict:
+    payload = (
+        data if data is not None else (json.dumps(body).encode() if body is not None else None)
+    )
     request = urllib.request.Request(url, data=payload, method=method)
     request.add_header("Authorization", f"Bearer {token}")
     if payload is not None:
@@ -125,7 +145,9 @@ def call(token: str, method: str, url: str, body=None, data: bytes = None,
             detail = json.loads(detail)["error"]["message"]
         except Exception:
             pass
-        raise PlayError(f"{method} {url.split('/applications/')[-1]} -> HTTP {e.code}: {detail}")
+        raise PlayError(
+            f"{method} {url.split('/applications/')[-1]} -> HTTP {e.code}: {detail}"
+        ) from None
 
 
 def release_notes(path: str) -> str:
@@ -153,8 +175,11 @@ def main() -> int:
     parser.add_argument("--version-code", type=int)
     parser.add_argument("--release-name")
     parser.add_argument("--notes-file")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Check the credentials and app access, then discard the edit")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Check the credentials and app access, then discard the edit",
+    )
     args = parser.parse_args()
 
     account = load_service_account()
@@ -173,20 +198,32 @@ def main() -> int:
         if not args.bundle or not os.path.exists(args.bundle):
             raise PlayError(f"Bundle not found: {args.bundle}")
 
-        known = {b["versionCode"] for b in call(token, "GET", f"{app}/edits/{edit_id}/bundles").get("bundles", [])}
+        known = {
+            b["versionCode"]
+            for b in call(token, "GET", f"{app}/edits/{edit_id}/bundles").get("bundles", [])
+        }
         if args.version_code and args.version_code in known:
             version_code = args.version_code
             print(f"ℹ️  Play already has versionCode {version_code}; skipping the upload")
         else:
-            print(f"⬆️  Uploading {os.path.basename(args.bundle)} ({os.path.getsize(args.bundle) // 1024} KB)")
+            print(
+                f"⬆️  Uploading {os.path.basename(args.bundle)} ({os.path.getsize(args.bundle) // 1024} KB)"
+            )
             with open(args.bundle, "rb") as f:
-                uploaded = call(token, "POST",
-                                f"{UPLOAD_API}/{args.package}/edits/{edit_id}/bundles?uploadType=media",
-                                data=f.read(), content_type="application/octet-stream", timeout=900)
+                uploaded = call(
+                    token,
+                    "POST",
+                    f"{UPLOAD_API}/{args.package}/edits/{edit_id}/bundles?uploadType=media",
+                    data=f.read(),
+                    content_type="application/octet-stream",
+                    timeout=900,
+                )
             version_code = uploaded["versionCode"]
             if args.version_code and version_code != args.version_code:
-                print(f"⚠️  The bundle's versionCode is {version_code}, not {args.version_code}. "
-                      "The app's Gradle config is not reading CATAPULT_BUILD_NUMBER.")
+                print(
+                    f"⚠️  The bundle's versionCode is {version_code}, not {args.version_code}. "
+                    "The app's Gradle config is not reading CATAPULT_BUILD_NUMBER."
+                )
 
         release = {
             "name": args.release_name or str(version_code),
@@ -196,8 +233,12 @@ def main() -> int:
         notes = release_notes(args.notes_file)
         if notes:
             release["releaseNotes"] = [{"language": args.language, "text": notes}]
-        call(token, "PUT", f"{app}/edits/{edit_id}/tracks/{args.track}",
-             body={"track": args.track, "releases": [release]})
+        call(
+            token,
+            "PUT",
+            f"{app}/edits/{edit_id}/tracks/{args.track}",
+            body={"track": args.track, "releases": [release]},
+        )
         call(token, "POST", f"{app}/edits/{edit_id}:commit")
         committed = True
         print(f"✅ versionCode {version_code} is on the {args.track} track ({args.status})")
@@ -206,8 +247,11 @@ def main() -> int:
         message = str(e)
         print(f"❌ {message}", file=sys.stderr)
         if "draft app" in message:
-            print("   Play only takes draft releases until the app's first release is rolled out "
-                  "from Play Console. Set status = \"draft\" under [play] until then.", file=sys.stderr)
+            print(
+                "   Play only takes draft releases until the app's first release is rolled out "
+                'from Play Console. Set status = "draft" under [play] until then.',
+                file=sys.stderr,
+            )
         return 1
     finally:
         if not committed:

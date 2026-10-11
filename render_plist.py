@@ -14,6 +14,7 @@ Usage:
   render_plist.py <config> --kind direct|appstore|resource \\
                   --version <v> --build-number <n> [--base <plist>] [--out <path>]
 """
+
 import argparse
 import os
 import plistlib
@@ -21,13 +22,10 @@ import sys
 
 from parse_config import load_config
 
+
 def xml_escape(s: str) -> str:
-    return (
-        s.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-    )
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
 
 def env_values(cfg: dict) -> dict:
     """Info.plist keys taken from the environment, so a value like an API key
@@ -41,6 +39,7 @@ def env_values(cfg: dict) -> dict:
         values[key] = value
     return values
 
+
 def render_resource(cfg: dict, version: str) -> str:
     app = cfg["app"]
     return f"""<?xml version="1.0" encoding="UTF-8"?>
@@ -48,9 +47,9 @@ def render_resource(cfg: dict, version: str) -> str:
 <plist version="1.0">
 <dict>
     <key>CFBundleIdentifier</key>
-    <string>{xml_escape(app['bundle_id'])}.resources</string>
+    <string>{xml_escape(app["bundle_id"])}.resources</string>
     <key>CFBundleName</key>
-    <string>{xml_escape(app['name'])}_{xml_escape(cfg['build']['swift_target'])}</string>
+    <string>{xml_escape(app["name"])}_{xml_escape(cfg["build"]["swift_target"])}</string>
     <key>CFBundlePackageType</key>
     <string>BNDL</string>
     <key>CFBundleShortVersionString</key>
@@ -60,6 +59,7 @@ def render_resource(cfg: dict, version: str) -> str:
 </dict>
 </plist>
 """
+
 
 def render_generated(cfg: dict, kind: str, version: str, build_number: str) -> str:
     app = cfg["app"]
@@ -144,19 +144,24 @@ def render_generated(cfg: dict, kind: str, version: str, build_number: str) -> s
     lines += ["</dict>", "</plist>", ""]
     return "\n".join(lines)
 
-def render_passthrough(cfg: dict, kind: str, version: str, build_number: str,
-                       template_path: str, app_root: str) -> str:
+
+def render_passthrough(
+    cfg: dict, kind: str, version: str, build_number: str, template_path: str, app_root: str
+) -> str:
     """Read template plist, inject dynamic keys, write back as XML.
 
     Only the keys that *must* change per build are written; everything else in
     the template (document types, UTI declarations, custom Info.plist keys)
     is preserved as-is.
     """
-    full_template_path = template_path if os.path.isabs(template_path) else os.path.join(app_root, template_path)
+    full_template_path = (
+        template_path if os.path.isabs(template_path) else os.path.join(app_root, template_path)
+    )
     with open(full_template_path, "rb") as f:
         plist = plistlib.load(f)
 
     return inject(plist, cfg, kind, version, build_number)
+
 
 def render_base(cfg: dict, kind: str, version: str, build_number: str, base_path: str) -> str:
     """Layer usage descriptions, extras and min_macos onto a tool-written plist, then the per-build keys."""
@@ -174,6 +179,7 @@ def render_base(cfg: dict, kind: str, version: str, build_number: str, base_path
 
     return inject(plist, cfg, kind, version, build_number)
 
+
 def inject(plist: dict, cfg: dict, kind: str, version: str, build_number: str) -> str:
     """Write the keys that change per build into a loaded plist and serialize it."""
     plist["CFBundleShortVersionString"] = version
@@ -184,7 +190,9 @@ def inject(plist: dict, cfg: dict, kind: str, version: str, build_number: str) -
             if k.startswith("SU") and k[2:3].isupper():
                 del plist[k]
         if "appstore" in cfg:
-            plist["ITSAppUsesNonExemptEncryption"] = cfg["appstore"].get("non_exempt_encryption", False)
+            plist["ITSAppUsesNonExemptEncryption"] = cfg["appstore"].get(
+                "non_exempt_encryption", False
+            )
         if cfg.get("app", {}).get("category"):
             plist["LSApplicationCategoryType"] = cfg["app"]["category"]
 
@@ -198,6 +206,7 @@ def inject(plist: dict, cfg: dict, kind: str, version: str, build_number: str) -
     plist.update(env_values(cfg))
 
     return plistlib.dumps(plist).decode("utf-8")
+
 
 def main():
     p = argparse.ArgumentParser()
@@ -221,8 +230,9 @@ def main():
     else:
         template = cfg.get("plist", {}).get("template")
         if template:
-            content = render_passthrough(cfg, args.kind, args.version, build_number,
-                                          template, app_root)
+            content = render_passthrough(
+                cfg, args.kind, args.version, build_number, template, app_root
+            )
         else:
             content = render_generated(cfg, args.kind, args.version, build_number)
 
@@ -231,6 +241,7 @@ def main():
             f.write(content)
     else:
         sys.stdout.write(content)
+
 
 if __name__ == "__main__":
     main()

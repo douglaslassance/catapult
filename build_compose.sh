@@ -106,83 +106,6 @@ sign_app() {
     codesign --verify --deep --strict "$app"
 }
 
-make_dmg() {
-    local dmg="$1" volname mount temp size_mb
-    echo "💿 Creating DMG..."
-    rm -f "$dmg"
-    volname="${CATAPULT_DMG_VOLUME_NAME:-$APP_NAME}"
-    mount="/tmp/${SLUG}-dmg-$$"
-    temp="/tmp/${SLUG}-temp-$$.dmg"
-    # A bundled JVM runs to hundreds of MB, so the image is sized from the app plus HFS+ headroom.
-    size_mb=$(( $(du -sm "$APP_PATH" | cut -f1) * 6 / 5 + 50 ))
-    mkdir -p "$mount"
-    hdiutil create -size "${size_mb}m" -fs HFS+ -volname "$volname" "$temp" -quiet
-    hdiutil attach "$temp" -nobrowse -noverify -noautoopen -mountpoint "$mount" -quiet
-    ditto "$APP_PATH" "${mount}/${APP_NAME}.app"
-    ln -sf /Applications "${mount}/Applications"
-    hdiutil detach "$mount" -quiet
-    hdiutil convert "$temp" -format UDZO -imagekey zlib-level=9 -o "$dmg" -quiet
-    rm -f "$temp"
-    rmdir "$mount"
-    echo "✅ DMG created"
-    echo ""
-}
-
-notarize() {
-    local dmg="$1" key_file submit_output submission_id wait_output status
-    if [ -z "${NOTARIZATION_KEY_ID:-}" ] || [ -z "${NOTARIZATION_ISSUER_ID:-}" ] || [ -z "${NOTARIZATION_KEY:-}" ]; then
-        echo "⚠️  Notarization skipped (credentials not set)"
-        echo ""
-        return
-    fi
-
-    echo "📝 Submitting for notarization..."
-    key_file=$(mktemp /tmp/notarization_XXXXXX)
-    echo "$NOTARIZATION_KEY" | base64 --decode > "$key_file"
-
-    submit_output=$(xcrun notarytool submit "$dmg" \
-        --key "$key_file" \
-        --key-id "$NOTARIZATION_KEY_ID" \
-        --issuer "$NOTARIZATION_ISSUER_ID" 2>&1)
-    echo "$submit_output"
-
-    submission_id=$(echo "$submit_output" | grep -E '^\s*id:' | head -1 | awk '{print $2}')
-    if [ -z "$submission_id" ]; then
-        echo "❌ Failed to get submission ID"
-        rm -f "$key_file"
-        exit 1
-    fi
-    echo "Submission ID: $submission_id"
-    echo ""
-
-    echo "⏳ Waiting for notarization result..."
-    wait_output=$(xcrun notarytool wait "$submission_id" \
-        --key "$key_file" \
-        --key-id "$NOTARIZATION_KEY_ID" \
-        --issuer "$NOTARIZATION_ISSUER_ID" 2>&1)
-    echo "$wait_output"
-
-    status=$(echo "$wait_output" | grep -E 'status:' | tail -1 | awk '{print $2}')
-    if [ "$status" != "Accepted" ]; then
-        echo "❌ Notarization failed: ${status}"
-        xcrun notarytool log "$submission_id" \
-            --key "$key_file" \
-            --key-id "$NOTARIZATION_KEY_ID" \
-            --issuer "$NOTARIZATION_ISSUER_ID" 2>&1 || true
-        rm -f "$key_file"
-        exit 1
-    fi
-
-    rm -f "$key_file"
-    echo "✅ Notarized"
-    echo ""
-
-    echo "📎 Stapling..."
-    xcrun stapler staple "$dmg"
-    echo "✅ Stapled"
-    echo ""
-}
-
 build_macos() {
     local app_src dmg="${BASENAME}.dmg" icon_name
     rm -rf "${BINARIES}/app"
@@ -234,15 +157,8 @@ build_macos() {
     fi
     echo ""
 
-    make_dmg "${DIST_DIR}/${dmg}"
-
-    if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
-        echo "🔏 Signing DMG..."
-        codesign --force --sign "$APPLE_SIGNING_IDENTITY" "${DIST_DIR}/${dmg}"
-        echo ""
-    fi
-
-    notarize "${DIST_DIR}/${dmg}"
+    catapult_make_dmg "$APP_PATH" "${DIST_DIR}/${dmg}"
+    catapult_notarize "${DIST_DIR}/${dmg}"
 
     # After stapling, which modifies the DMG.
     echo "🔐 Generating checksum..."
@@ -322,13 +238,13 @@ build_linux() {
     appdir="${BUILD_DIR}/${APP_NAME}.AppDir"
     mkdir -p "$appdir"
     cp -a "${image}/." "$appdir/"
-    cat > "${appdir}/AppRun" <<APPRUN
+    cat >"${appdir}/AppRun" <<APPRUN
 #!/bin/sh
 HERE="\$(dirname "\$(readlink -f "\$0")")"
 exec "\$HERE/bin/${APP_NAME}" "\$@"
 APPRUN
     chmod +x "${appdir}/AppRun"
-    cat > "${appdir}/${SLUG}.desktop" <<DESKTOP
+    cat >"${appdir}/${SLUG}.desktop" <<DESKTOP
 [Desktop Entry]
 Type=Application
 Name=${APP_NAME}
@@ -370,7 +286,10 @@ case "$CATAPULT_HOST_OS" in
     macos) build_macos ;;
     windows) build_windows ;;
     linux) build_linux ;;
-    *) echo "❌ Compose desktop builds run on macOS, Windows or Linux (got $(uname -s))"; exit 1 ;;
+    *)
+        echo "❌ Compose desktop builds run on macOS, Windows or Linux (got $(uname -s))"
+        exit 1
+        ;;
 esac
 
 echo "✅ Build complete!"

@@ -36,7 +36,7 @@ if echo "$VERSION" | grep -qiE '(alpha|beta|rc|pre|dev)'; then
     echo "⚠️  Skipping ${MANIFEST_NAME} (pre-release: $VERSION)"
     exit 0
 fi
-if (( ${#FRAGMENTS[@]} == 0 )); then
+if ((${#FRAGMENTS[@]} == 0)); then
     echo "ℹ️  No updater fragments for ${VERSION}; ${MANIFEST_NAME} left as is"
     exit 0
 fi
@@ -46,12 +46,12 @@ missing=()
 [[ -z ${S3_ACCESS_KEY_ID:-} ]] && missing+=("S3_ACCESS_KEY_ID")
 [[ -z ${S3_SECRET_ACCESS_KEY:-} ]] && missing+=("S3_SECRET_ACCESS_KEY")
 [[ -z ${S3_BUCKET_NAME:-} ]] && missing+=("S3_BUCKET_NAME")
-if (( ${#missing[@]} )); then
+if ((${#missing[@]})); then
     echo "❌ Missing env vars: ${missing[*]}"
     exit 1
 fi
 
-if ! command -v aws &> /dev/null; then
+if ! command -v aws &>/dev/null; then
     echo "📦 Installing AWS CLI..."
     brew install awscli
 fi
@@ -66,7 +66,7 @@ MANIFEST_FILE="${CATAPULT_DIST_DIR}/${MANIFEST_NAME}"
 mkdir -p "$CATAPULT_DIST_DIR"
 
 echo "🧩 Merging ${#FRAGMENTS[@]} updater fragment(s) into ${MANIFEST_NAME}..."
-aws s3 cp "s3://${S3_BUCKET_NAME}/${MANIFEST_KEY}" - --endpoint-url "$R2_ENDPOINT" 2>/dev/null | \
+aws s3 cp "s3://${S3_BUCKET_NAME}/${MANIFEST_KEY}" - --endpoint-url "$R2_ENDPOINT" 2>/dev/null |
     "$CATAPULT_PYTHON" -c '
 import json, sys
 version, pub_date, *fragments = sys.argv[1:]
@@ -86,8 +86,8 @@ for path in fragments:
         sys.exit("catapult: %s is for version %s, not %s" % (path, fragment.get("version"), version))
     manifest["platforms"].update(fragment["platforms"])
 print(json.dumps(manifest, indent=2))
-' "$VERSION" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${FRAGMENTS[@]}" > "$MANIFEST_FILE"
-"$CATAPULT_PYTHON" -c 'import json, sys; print("   " + ", ".join(sorted(json.load(sys.stdin)["platforms"])))' < "$MANIFEST_FILE"
+' "$VERSION" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${FRAGMENTS[@]}" >"$MANIFEST_FILE"
+"$CATAPULT_PYTHON" -c 'import json, sys; print("   " + ", ".join(sorted(json.load(sys.stdin)["platforms"])))' <"$MANIFEST_FILE"
 
 echo "☁️  Uploading ${MANIFEST_NAME}..."
 aws s3 cp "$MANIFEST_FILE" \

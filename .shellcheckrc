@@ -1,0 +1,2 @@
+# ls | head -1 picks the one file a build tool wrote, whose name never holds a newline.
+disable=SC2012

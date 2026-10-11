@@ -39,12 +39,30 @@ TESTFLIGHT=1
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        --target) export CATAPULT_TARGET="$2"; shift 2 ;;
-        --target=*) export CATAPULT_TARGET="${1#*=}"; shift ;;
-        --channels) CHANNELS="$2"; shift 2 ;;
-        --channels=*) CHANNELS="${1#*=}"; shift ;;
-        --no-testflight) TESTFLIGHT=0; shift ;;
-        *) VERSION="$1"; shift ;;
+        --target)
+            export CATAPULT_TARGET="$2"
+            shift 2
+            ;;
+        --target=*)
+            export CATAPULT_TARGET="${1#*=}"
+            shift
+            ;;
+        --channels)
+            CHANNELS="$2"
+            shift 2
+            ;;
+        --channels=*)
+            CHANNELS="${1#*=}"
+            shift
+            ;;
+        --no-testflight)
+            TESTFLIGHT=0
+            shift
+            ;;
+        *)
+            VERSION="$1"
+            shift
+            ;;
     esac
 done
 

@@ -100,66 +100,90 @@ done
 
 IS_PRERELEASE=$(echo "$VERSION" | grep -qiE '(alpha|beta|rc|pre|dev)' && echo 1 || echo 0)
 
-# Sparkle appcast, which Compose builds never embed
+# Sparkle appcast, which Compose builds never embed. Sparkle's generate_appcast
+# signs the DMG and reads the version and minimum macOS from the app inside it.
 if [ -n "${CATAPULT_HAS_SPARKLE:-}" ] && [ "$CATAPULT_BUILD_KIND" != "compose" ]; then
+    GENERATE_APPCAST=$(find .build/artifacts -type f -name generate_appcast 2>/dev/null | head -1)
     if [ "$IS_PRERELEASE" = "1" ]; then
         echo "⚠️  Skipping appcast update (pre-release: $VERSION)"
         echo ""
+    elif [ -z "$GENERATE_APPCAST" ]; then
+        echo "⚠️  generate_appcast not found, run 'swift package resolve' first. Skipping appcast"
+        echo ""
     else
-        EDSIG_FILE="${DIST_DIR}/${DMG_FILE}.edsig"
-        if [ ! -f "$EDSIG_FILE" ]; then
-            echo "⚠️  Sparkle signature not found (${EDSIG_FILE}) — run build.sh first, skipping appcast"
-            echo ""
+        APPCAST_DIR=$(mktemp -d /tmp/appcast_XXXXXX)
+        APPCAST_FILE="${APPCAST_DIR}/${APPCAST_FILE_NAME}"
+        cp "${DIST_DIR}/${DMG_FILE}" "$APPCAST_DIR/"
+
+        # Starting from the published feed keeps its earlier items, unless it no longer parses.
+        if aws s3 cp "s3://${S3_BUCKET_NAME}/${BUCKET_PREFIX}/${APPCAST_FILE_NAME}" "$APPCAST_FILE" \
+            --endpoint-url "$R2_ENDPOINT" >/dev/null 2>&1; then
+            if ! "$CATAPULT_PYTHON" -c 'import sys, xml.etree.ElementTree as ET; ET.parse(sys.argv[1])' "$APPCAST_FILE" 2>/dev/null; then
+                echo "⚠️  The published ${APPCAST_FILE_NAME} is not valid XML; starting a new one"
+                rm -f "$APPCAST_FILE"
+            fi
         else
-            # Signatures written before this was normalised at build time
-            # hold the whole attribute pair, so both shapes are read here.
-            ED_SIG=$(catapult_ed_signature "$(cat "$EDSIG_FILE")")
-            if [ -z "$ED_SIG" ]; then
-                echo "❌ ${EDSIG_FILE} holds no readable signature"
-                exit 1
-            fi
-            DMG_SIZE=$(stat -f%z "${DIST_DIR}/${DMG_FILE}")
-            PUB_DATE=$(date -R)
-            DOWNLOAD_URL="${DOWNLOAD_URL_TEMPLATE//\{version\}/$VERSION}"
-            DOWNLOAD_URL="${DOWNLOAD_URL//\{target\}/$TARGET}"
-            APPCAST_FILE=$(mktemp /tmp/appcast_XXXXXX.xml)
-            cat > "$APPCAST_FILE" <<APPCAST
-<?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
-    <channel>
-        <title>${APP_NAME}</title>
-        <item>
-            <title>Version ${VERSION}</title>
-            <pubDate>${PUB_DATE}</pubDate>
-            <sparkle:version>${VERSION}</sparkle:version>
-            <sparkle:minimumSystemVersion>${CATAPULT_APP_MIN_MACOS}</sparkle:minimumSystemVersion>
-            <enclosure
-                url="${DOWNLOAD_URL}"
-                sparkle:edSignature="${ED_SIG}"
-                length="${DMG_SIZE}"
-                type="application/octet-stream"/>
-        </item>
-    </channel>
-</rss>
-APPCAST
-
-            echo "☁️  Uploading ${APPCAST_FILE_NAME}..."
-            aws s3 cp "$APPCAST_FILE" \
-                "s3://${S3_BUCKET_NAME}/${BUCKET_PREFIX}/${APPCAST_FILE_NAME}" \
-                --content-type "application/xml" \
-                --endpoint-url "$R2_ENDPOINT"
             rm -f "$APPCAST_FILE"
-            echo "✅ ${APPCAST_FILE_NAME} updated"
-
-            if [ -n "${CLOUDFLARE_API_TOKEN:-}" ] && [ -n "${CLOUDFLARE_ZONE_ID:-}" ] && [ -n "${S3_PUBLIC_URL:-}" ]; then
-                PURGE=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/purge_cache" \
-                    -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-                    -H "Content-Type: application/json" \
-                    --data "{\"files\":[\"${S3_PUBLIC_URL}/${BUCKET_PREFIX}/${APPCAST_FILE_NAME}\"]}")
-                echo "$PURGE" | grep -q '"success":true' && echo "✅ Appcast cache purged" || echo "⚠️  Appcast cache purge failed"
-            fi
-            echo ""
         fi
+
+        SPARKLE_KEY_FILE=""
+        KEY_ARGS=()
+        if [ -n "${SPARKLE_PRIVATE_KEY:-}" ]; then
+            SPARKLE_KEY_FILE=$(mktemp /tmp/sparkle_key_XXXXXX)
+            echo "$SPARKLE_PRIVATE_KEY" | base64 --decode >"$SPARKLE_KEY_FILE"
+            KEY_ARGS=(--ed-key-file "$SPARKLE_KEY_FILE")
+        elif [ -n "${SPARKLE_PRIVATE_KEY_FILE:-}" ]; then
+            KEY_ARGS=(--ed-key-file "$SPARKLE_PRIVATE_KEY_FILE")
+        fi
+
+        # generate_appcast only knows prefix + filename URLs, so a placeholder prefix is swapped for the templated URL after.
+        PLACEHOLDER_URL="https://catapult.invalid/${DMG_FILE}"
+        echo "✍️  Generating ${APPCAST_FILE_NAME}..."
+        if ! "$GENERATE_APPCAST" "${KEY_ARGS[@]}" \
+            --download-url-prefix "https://catapult.invalid/" \
+            --maximum-deltas 0 \
+            -o "$APPCAST_FILE" \
+            "$APPCAST_DIR"; then
+            [ -n "$SPARKLE_KEY_FILE" ] && rm -f "$SPARKLE_KEY_FILE"
+            rm -rf "$APPCAST_DIR"
+            echo "❌ generate_appcast failed"
+            exit 1
+        fi
+        [ -n "$SPARKLE_KEY_FILE" ] && rm -f "$SPARKLE_KEY_FILE"
+
+        DOWNLOAD_URL="${DOWNLOAD_URL_TEMPLATE//\{version\}/$VERSION}"
+        DOWNLOAD_URL="${DOWNLOAD_URL//\{target\}/$TARGET}"
+        "$CATAPULT_PYTHON" -c '
+import sys
+from xml.sax.saxutils import escape
+path, placeholder, url = sys.argv[1:]
+with open(path, encoding="utf-8") as f:
+    feed = f.read()
+if placeholder not in feed:
+    sys.exit("catapult: generate_appcast wrote no enclosure for " + placeholder)
+feed = feed.replace(placeholder, escape(url, {"\"": "&quot;"}))
+if "catapult.invalid" in feed:
+    sys.exit("catapult: the appcast still points at catapult.invalid")
+with open(path, "w", encoding="utf-8") as f:
+    f.write(feed)
+' "$APPCAST_FILE" "$PLACEHOLDER_URL" "$DOWNLOAD_URL"
+
+        echo "☁️  Uploading ${APPCAST_FILE_NAME}..."
+        aws s3 cp "$APPCAST_FILE" \
+            "s3://${S3_BUCKET_NAME}/${BUCKET_PREFIX}/${APPCAST_FILE_NAME}" \
+            --content-type "application/xml" \
+            --endpoint-url "$R2_ENDPOINT"
+        rm -rf "$APPCAST_DIR"
+        echo "✅ ${APPCAST_FILE_NAME} updated"
+
+        if [ -n "${CLOUDFLARE_API_TOKEN:-}" ] && [ -n "${CLOUDFLARE_ZONE_ID:-}" ] && [ -n "${S3_PUBLIC_URL:-}" ]; then
+            PURGE=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/purge_cache" \
+                -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+                -H "Content-Type: application/json" \
+                --data "{\"files\":[\"${S3_PUBLIC_URL}/${BUCKET_PREFIX}/${APPCAST_FILE_NAME}\"]}")
+            echo "$PURGE" | grep -q '"success":true' && echo "✅ Appcast cache purged" || echo "⚠️  Appcast cache purge failed"
+        fi
+        echo ""
     fi
 fi
 

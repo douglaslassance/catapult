@@ -198,87 +198,12 @@ fi
 echo "✅ App bundle created"
 echo ""
 
-# DMG
-echo "💿 Creating DMG..."
-rm -f "${DIST_DIR}/${DMG_NAME}"
-VOLNAME="${CATAPULT_DMG_VOLUME_NAME:-$APP_NAME}"
-DMG_MOUNT="/tmp/${SLUG}-dmg-$$"
-DMG_TEMP="/tmp/${SLUG}-temp-$$.dmg"
-mkdir -p "$DMG_MOUNT"
-hdiutil create -size 300m -fs HFS+ -volname "$VOLNAME" "$DMG_TEMP" -quiet
-hdiutil attach "$DMG_TEMP" -nobrowse -noverify -noautoopen -mountpoint "$DMG_MOUNT" -quiet
-ditto "${APP_PATH}" "${DMG_MOUNT}/${APP_NAME}.app"
-ln -sf /Applications "${DMG_MOUNT}/Applications"
-hdiutil detach "$DMG_MOUNT" -quiet
-hdiutil convert "$DMG_TEMP" -format UDZO -imagekey zlib-level=9 -o "${DIST_DIR}/${DMG_NAME}" -quiet
-rm -f "$DMG_TEMP"
-rmdir "$DMG_MOUNT"
-echo "✅ DMG created"
-echo ""
+catapult_make_dmg "$APP_PATH" "${DIST_DIR}/${DMG_NAME}"
+catapult_notarize "${DIST_DIR}/${DMG_NAME}"
 
-if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
-    echo "🔏 Signing DMG..."
-    codesign --force --sign "$APPLE_SIGNING_IDENTITY" "${DIST_DIR}/${DMG_NAME}"
-    echo ""
-fi
-
-# Notarize + staple
-if [ -n "${NOTARIZATION_KEY_ID:-}" ] && [ -n "${NOTARIZATION_ISSUER_ID:-}" ] && [ -n "${NOTARIZATION_KEY:-}" ]; then
-    echo "📝 Submitting for notarization..."
-    NOTARIZATION_KEY_FILE=$(mktemp /tmp/notarization_XXXXXX)
-    echo "$NOTARIZATION_KEY" | base64 --decode > "$NOTARIZATION_KEY_FILE"
-
-    SUBMIT_OUTPUT=$(xcrun notarytool submit "${DIST_DIR}/${DMG_NAME}" \
-        --key "$NOTARIZATION_KEY_FILE" \
-        --key-id "$NOTARIZATION_KEY_ID" \
-        --issuer "$NOTARIZATION_ISSUER_ID" 2>&1)
-    echo "$SUBMIT_OUTPUT"
-
-    SUBMISSION_ID=$(echo "$SUBMIT_OUTPUT" | grep -E '^\s*id:' | head -1 | awk '{print $2}')
-    if [ -z "$SUBMISSION_ID" ]; then
-        echo "❌ Failed to get submission ID"
-        rm -f "$NOTARIZATION_KEY_FILE"
-        exit 1
-    fi
-    echo "Submission ID: $SUBMISSION_ID"
-    echo ""
-
-    echo "⏳ Waiting for notarization result..."
-    WAIT_OUTPUT=$(xcrun notarytool wait "$SUBMISSION_ID" \
-        --key "$NOTARIZATION_KEY_FILE" \
-        --key-id "$NOTARIZATION_KEY_ID" \
-        --issuer "$NOTARIZATION_ISSUER_ID" 2>&1)
-    echo "$WAIT_OUTPUT"
-
-    NOTARIZATION_STATUS=$(echo "$WAIT_OUTPUT" | grep -E 'status:' | tail -1 | awk '{print $2}')
-
-    if [ "$NOTARIZATION_STATUS" != "Accepted" ]; then
-        echo "❌ Notarization failed: ${NOTARIZATION_STATUS}"
-        xcrun notarytool log "$SUBMISSION_ID" \
-            --key "$NOTARIZATION_KEY_FILE" \
-            --key-id "$NOTARIZATION_KEY_ID" \
-            --issuer "$NOTARIZATION_ISSUER_ID" 2>&1 || true
-        rm -f "$NOTARIZATION_KEY_FILE"
-        exit 1
-    fi
-
-    rm -f "$NOTARIZATION_KEY_FILE"
-    echo "✅ Notarized"
-    echo ""
-
-    echo "📎 Stapling..."
-    xcrun stapler staple "${DIST_DIR}/${DMG_NAME}"
-    echo "✅ Stapled"
-    echo ""
-else
-    echo "⚠️  Notarization skipped (credentials not set)"
-    echo ""
-fi
-
-# SHA256 (after stapling, since stapling modifies the DMG)
+# After stapling, which modifies the DMG.
 echo "🔐 Generating checksum..."
-shasum -a 256 "${DIST_DIR}/${DMG_NAME}" > "${DIST_DIR}/${DMG_NAME}.sha256"
-cat "${DIST_DIR}/${DMG_NAME}.sha256"
+catapult_checksum "${DIST_DIR}/${DMG_NAME}"
 echo ""
 
 echo "✅ Build complete!"

@@ -98,56 +98,8 @@ sign_for_updater() {
     fi
 }
 
-notarize() {
-    local dmg="$1" key_file submit_output submission_id wait_output status
-    if [ -z "${NOTARIZATION_KEY_ID:-}" ] || [ -z "${NOTARIZATION_ISSUER_ID:-}" ] || [ -z "${NOTARIZATION_KEY:-}" ]; then
-        echo "⚠️  Notarization skipped (credentials not set)"
-        echo ""
-        return
-    fi
-
-    echo "📝 Submitting for notarization..."
-    key_file=$(mktemp /tmp/notarization_XXXXXX)
-    echo "$NOTARIZATION_KEY" | base64 --decode > "$key_file"
-
-    submit_output=$(xcrun notarytool submit "$dmg" \
-        --key "$key_file" \
-        --key-id "$NOTARIZATION_KEY_ID" \
-        --issuer "$NOTARIZATION_ISSUER_ID" 2>&1)
-    echo "$submit_output"
-
-    submission_id=$(echo "$submit_output" | grep -E '^\s*id:' | head -1 | awk '{print $2}')
-    if [ -z "$submission_id" ]; then
-        rm -f "$key_file"
-        echo "❌ Failed to get submission ID"
-        exit 1
-    fi
-
-    wait_output=$(xcrun notarytool wait "$submission_id" \
-        --key "$key_file" \
-        --key-id "$NOTARIZATION_KEY_ID" \
-        --issuer "$NOTARIZATION_ISSUER_ID" 2>&1)
-    echo "$wait_output"
-
-    status=$(echo "$wait_output" | grep -E 'status:' | tail -1 | awk '{print $2}')
-    if [ "$status" != "Accepted" ]; then
-        xcrun notarytool log "$submission_id" \
-            --key "$key_file" \
-            --key-id "$NOTARIZATION_KEY_ID" \
-            --issuer "$NOTARIZATION_ISSUER_ID" 2>&1 || true
-        rm -f "$key_file"
-        exit 1
-    fi
-    rm -f "$key_file"
-    echo "✅ Notarized"
-
-    xcrun stapler staple "$dmg"
-    echo "✅ Stapled"
-    echo ""
-}
-
 build_macos() {
-    local dmg="${BASENAME}.dmg" app_src app_path volname dmg_mount dmg_temp updater_src
+    local dmg="${BASENAME}.dmg" app_src app_path updater_src
     # catapult wraps the .app in its own DMG, so Tauri's DMG would only cost time.
     tauri_build app
 
@@ -185,28 +137,7 @@ build_macos() {
     fi
     echo ""
 
-    echo "💿 Creating DMG..."
-    rm -f "${DIST_DIR}/${dmg}"
-    volname="${CATAPULT_DMG_VOLUME_NAME:-$APP_NAME}"
-    dmg_mount="/tmp/${SLUG}-dmg-$$"
-    dmg_temp="/tmp/${SLUG}-temp-$$.dmg"
-    mkdir -p "$dmg_mount"
-    hdiutil create -size 300m -fs HFS+ -volname "$volname" "$dmg_temp" -quiet
-    hdiutil attach "$dmg_temp" -nobrowse -noverify -noautoopen -mountpoint "$dmg_mount" -quiet
-    ditto "${app_path}" "${dmg_mount}/${APP_NAME}.app"
-    ln -sf /Applications "${dmg_mount}/Applications"
-    hdiutil detach "$dmg_mount" -quiet
-    hdiutil convert "$dmg_temp" -format UDZO -imagekey zlib-level=9 -o "${DIST_DIR}/${dmg}" -quiet
-    rm -f "$dmg_temp"
-    rmdir "$dmg_mount"
-    echo "✅ DMG created"
-    echo ""
-
-    if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
-        echo "🔏 Signing DMG..."
-        codesign --force --sign "$APPLE_SIGNING_IDENTITY" "${DIST_DIR}/${dmg}"
-        echo ""
-    fi
+    catapult_make_dmg "$app_path" "${DIST_DIR}/${dmg}"
 
     # The in-app updater on macOS downloads a .tar.gz of the .app rather than the DMG.
     updater_src="${BUNDLE_DIR}/macos/${APP_NAME}.app.tar.gz"
@@ -216,7 +147,7 @@ build_macos() {
     copy_updater_signature "$updater_src" "${BASENAME}.tar.gz"
     echo ""
 
-    notarize "${DIST_DIR}/${dmg}"
+    catapult_notarize "${DIST_DIR}/${dmg}"
 
     # After stapling, which modifies the DMG.
     catapult_checksum "${DIST_DIR}/${dmg}"

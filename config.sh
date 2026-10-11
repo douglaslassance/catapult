@@ -270,6 +270,91 @@ catapult_checksum() {
     cat "${file}.sha256"
 }
 
+# Builds a compressed DMG holding the app and an /Applications link, signed with Developer ID when there is one.
+catapult_make_dmg() {
+    local app="$1" dmg="$2" volname mount temp size_mb
+    echo "💿 Creating DMG..."
+    rm -f "$dmg"
+    volname="${CATAPULT_DMG_VOLUME_NAME:-$CATAPULT_APP_NAME}"
+    mount="/tmp/${CATAPULT_APP_SLUG}-dmg-$$"
+    temp="/tmp/${CATAPULT_APP_SLUG}-temp-$$.dmg"
+    # A bundled runtime can run to hundreds of MB, so the image is sized from the app plus HFS+ headroom.
+    size_mb=$(( $(du -sm "$app" | cut -f1) * 6 / 5 + 50 ))
+    mkdir -p "$mount"
+    hdiutil create -size "${size_mb}m" -fs HFS+ -volname "$volname" "$temp" -quiet
+    hdiutil attach "$temp" -nobrowse -noverify -noautoopen -mountpoint "$mount" -quiet
+    ditto "$app" "${mount}/${CATAPULT_APP_NAME}.app"
+    ln -sf /Applications "${mount}/Applications"
+    hdiutil detach "$mount" -quiet
+    hdiutil convert "$temp" -format UDZO -imagekey zlib-level=9 -o "$dmg" -quiet
+    rm -f "$temp"
+    rmdir "$mount"
+    echo "✅ DMG created"
+    echo ""
+
+    if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
+        echo "🔏 Signing DMG..."
+        codesign --force --sign "$APPLE_SIGNING_IDENTITY" "$dmg"
+        echo ""
+    fi
+}
+
+# Notarizes and staples a DMG with the App Store Connect API key, or skips it when the key is not set.
+catapult_notarize() {
+    local dmg="$1" key_file submit_output submission_id wait_output status
+    if [ -z "${NOTARIZATION_KEY_ID:-}" ] || [ -z "${NOTARIZATION_ISSUER_ID:-}" ] || [ -z "${NOTARIZATION_KEY:-}" ]; then
+        echo "⚠️  Notarization skipped (credentials not set)"
+        echo ""
+        return
+    fi
+
+    echo "📝 Submitting for notarization..."
+    key_file=$(mktemp /tmp/notarization_XXXXXX)
+    echo "$NOTARIZATION_KEY" | base64 --decode > "$key_file"
+
+    submit_output=$(xcrun notarytool submit "$dmg" \
+        --key "$key_file" \
+        --key-id "$NOTARIZATION_KEY_ID" \
+        --issuer "$NOTARIZATION_ISSUER_ID" 2>&1)
+    echo "$submit_output"
+
+    submission_id=$(echo "$submit_output" | grep -E '^\s*id:' | head -1 | awk '{print $2}')
+    if [ -z "$submission_id" ]; then
+        echo "❌ Failed to get submission ID"
+        rm -f "$key_file"
+        exit 1
+    fi
+    echo "Submission ID: $submission_id"
+    echo ""
+
+    echo "⏳ Waiting for notarization result..."
+    wait_output=$(xcrun notarytool wait "$submission_id" \
+        --key "$key_file" \
+        --key-id "$NOTARIZATION_KEY_ID" \
+        --issuer "$NOTARIZATION_ISSUER_ID" 2>&1)
+    echo "$wait_output"
+
+    status=$(echo "$wait_output" | grep -E 'status:' | tail -1 | awk '{print $2}')
+    if [ "$status" != "Accepted" ]; then
+        echo "❌ Notarization failed: ${status}"
+        xcrun notarytool log "$submission_id" \
+            --key "$key_file" \
+            --key-id "$NOTARIZATION_KEY_ID" \
+            --issuer "$NOTARIZATION_ISSUER_ID" 2>&1 || true
+        rm -f "$key_file"
+        exit 1
+    fi
+
+    rm -f "$key_file"
+    echo "✅ Notarized"
+    echo ""
+
+    echo "📎 Stapling..."
+    xcrun stapler staple "$dmg"
+    echo "✅ Stapled"
+    echo ""
+}
+
 # signtool ships with the Windows SDK, which rarely puts it on PATH, so the newest x64 build is used.
 catapult_find_signtool() {
     if command -v signtool >/dev/null 2>&1; then

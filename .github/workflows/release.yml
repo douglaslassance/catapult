@@ -215,14 +215,15 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Read the build kind
+      - name: Read the config
         id: cfg
         run: |
-          read_build() {
-            python -c "import sys, tomllib; print(tomllib.load(open('catapult.toml', 'rb')).get('build', {}).get(sys.argv[1], sys.argv[2]))" "$1" "$2" | tr -d '\r'
-          }
-          echo "kind=$(read_build kind swift)" >> "$GITHUB_OUTPUT"
-          echo "package_manager=$(read_build package_manager npm)" >> "$GITHUB_OUTPUT"
+          eval "$(python catapult/parse_config.py catapult.toml | tr -d '\r')"
+          {
+            echo "kind=${CATAPULT_BUILD_KIND:-swift}"
+            echo "package_manager=${CATAPULT_BUILD_PACKAGE_MANAGER:-npm}"
+            echo "linux_packages=${CATAPULT_BUILD_LINUX_PACKAGES:-}"
+          } >>"$GITHUB_OUTPUT"
 
       - uses: actions/setup-java@v4
         if: steps.cfg.outputs.kind == 'compose'
@@ -253,6 +254,15 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev patchelf xdg-utils
+
+      - name: Install the app's Linux packages
+        if: runner.os == 'Linux' && steps.cfg.outputs.linux_packages != ''
+        env:
+          PACKAGES: ${{ steps.cfg.outputs.linux_packages }}
+        run: |
+          read -ra packages <<<"$PACKAGES"
+          sudo apt-get update
+          sudo apt-get install -y "${packages[@]}"
 
       - name: Select Xcode
         if: runner.os == 'macOS'

@@ -30,7 +30,7 @@ fi
 missing=()
 [ -z "${NOTARIZATION_KEY_ID:-}" ] && missing+=("NOTARIZATION_KEY_ID")
 [ -z "${NOTARIZATION_ISSUER_ID:-}" ] && missing+=("NOTARIZATION_ISSUER_ID")
-if (( ${#missing[@]} )); then
+if ((${#missing[@]})); then
     echo "❌ Missing env vars: ${missing[*]}" >&2
     echo "   (Or drag ${IPA} into Transporter manually.)" >&2
     exit 1
@@ -41,7 +41,7 @@ KEYDIR="${HOME}/.appstoreconnect/private_keys"
 KEYFILE="${KEYDIR}/AuthKey_${NOTARIZATION_KEY_ID}.p8"
 if [ -n "${NOTARIZATION_KEY:-}" ]; then
     mkdir -p "$KEYDIR"
-    echo "$NOTARIZATION_KEY" | base64 --decode > "$KEYFILE"
+    echo "$NOTARIZATION_KEY" | base64 --decode >"$KEYFILE"
 fi
 
 echo "🚀 Uploading ${CATAPULT_APP_NAME} to App Store Connect (TestFlight)…"

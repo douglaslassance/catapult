@@ -29,7 +29,7 @@ missing=()
 [[ -z ${NOTARIZATION_KEY_ID:-} ]] && missing+=("NOTARIZATION_KEY_ID")
 [[ -z ${NOTARIZATION_ISSUER_ID:-} ]] && missing+=("NOTARIZATION_ISSUER_ID")
 [[ -z ${NOTARIZATION_KEY:-} ]] && missing+=("NOTARIZATION_KEY")
-if (( ${#missing[@]} )); then
+if ((${#missing[@]})); then
     echo "❌ Missing env vars: ${missing[*]}"
     echo "   (Or drag ${DIST_DIR}/${PKG_NAME} into Transporter manually.)"
     exit 1
@@ -41,7 +41,7 @@ echo ""
 PRIVATE_KEYS_DIR="$HOME/.appstoreconnect/private_keys"
 mkdir -p "$PRIVATE_KEYS_DIR"
 NOTARIZATION_KEY_FILE="${PRIVATE_KEYS_DIR}/AuthKey_${NOTARIZATION_KEY_ID}.p8"
-echo "$NOTARIZATION_KEY" | base64 --decode > "$NOTARIZATION_KEY_FILE"
+echo "$NOTARIZATION_KEY" | base64 --decode >"$NOTARIZATION_KEY_FILE"
 
 xcrun altool --upload-app \
     -f "${DIST_DIR}/${PKG_NAME}" \

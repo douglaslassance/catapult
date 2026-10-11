@@ -9,7 +9,7 @@ PULL_REQUEST=false
 ARGS=()
 for arg in "$@"; do
     case "$arg" in
-        -h|--help)
+        -h | --help)
             sed -n '2,6p' "$0" | sed 's/^# \{0,1\}//'
             exit 0
             ;;
@@ -32,7 +32,10 @@ cd "$CATAPULT_APP_ROOT"
 
 export GH_TOKEN="${HOMEBREW_TAP_ACCESS_TOKEN:-${GH_TOKEN:-}}"
 
-RED='\033[0;31m'; GREEN='\033[0;32m'; BLUE='\033[0;34m'; NC='\033[0m'
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+NC='\033[0m'
 
 APP_NAME="$CATAPULT_APP_NAME"
 SLUG="$CATAPULT_APP_SLUG"
@@ -105,7 +108,7 @@ echo "📝 Updating cask file..."
 mkdir -p "$(dirname "$CASK_FILE")"
 sed -e "s|{{VERSION}}|${VERSION}|g" \
     -e "s|{{SHA256}}|${SHA256}|g" \
-    "$CASK_TEMPLATE" > "$CASK_FILE"
+    "$CASK_TEMPLATE" >"$CASK_FILE"
 echo ""
 
 git --no-pager diff "$CASK_FILE"

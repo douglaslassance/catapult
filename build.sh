@@ -119,7 +119,7 @@ if [ -n "$ICON_NAME" ] && [ ! -f "${APP_PATH}/Contents/Resources/Assets.car" ]; 
     exit 1
 fi
 
-echo "APPL????" > "${APP_PATH}/Contents/PkgInfo"
+echo "APPL????" >"${APP_PATH}/Contents/PkgInfo"
 
 # Resource bundle Info.plist (codesign/notarization scanner expects one)
 if [ -n "$BUNDLE_PATH" ]; then

@@ -238,13 +238,13 @@ build_linux() {
     appdir="${BUILD_DIR}/${APP_NAME}.AppDir"
     mkdir -p "$appdir"
     cp -a "${image}/." "$appdir/"
-    cat > "${appdir}/AppRun" <<APPRUN
+    cat >"${appdir}/AppRun" <<APPRUN
 #!/bin/sh
 HERE="\$(dirname "\$(readlink -f "\$0")")"
 exec "\$HERE/bin/${APP_NAME}" "\$@"
 APPRUN
     chmod +x "${appdir}/AppRun"
-    cat > "${appdir}/${SLUG}.desktop" <<DESKTOP
+    cat >"${appdir}/${SLUG}.desktop" <<DESKTOP
 [Desktop Entry]
 Type=Application
 Name=${APP_NAME}
@@ -286,7 +286,10 @@ case "$CATAPULT_HOST_OS" in
     macos) build_macos ;;
     windows) build_windows ;;
     linux) build_linux ;;
-    *) echo "❌ Compose desktop builds run on macOS, Windows or Linux (got $(uname -s))"; exit 1 ;;
+    *)
+        echo "❌ Compose desktop builds run on macOS, Windows or Linux (got $(uname -s))"
+        exit 1
+        ;;
 esac
 
 echo "✅ Build complete!"

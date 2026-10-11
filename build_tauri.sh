@@ -120,11 +120,11 @@ build_macos() {
     # Tauri's own signing is incomplete, so the bundle is signed again inside out with Developer ID.
     if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
         echo "🔏 Code signing with Developer ID..."
-        find "${app_path}/Contents/Frameworks" -type d \( -name "*.framework" -o -name "*.dylib" \) 2>/dev/null | \
+        find "${app_path}/Contents/Frameworks" -type d \( -name "*.framework" -o -name "*.dylib" \) 2>/dev/null |
             sort -r | while read -r f; do
-                codesign --force --sign "$APPLE_SIGNING_IDENTITY" --options runtime --timestamp \
-                    --preserve-metadata=entitlements "$f"
-            done
+            codesign --force --sign "$APPLE_SIGNING_IDENTITY" --options runtime --timestamp \
+                --preserve-metadata=entitlements "$f"
+        done
         codesign --force --sign "$APPLE_SIGNING_IDENTITY" \
             --entitlements "$CATAPULT_BUILD_ENTITLEMENTS_DIRECT" \
             --options runtime --timestamp \
@@ -218,7 +218,10 @@ case "$CATAPULT_HOST_OS" in
     macos) build_macos ;;
     windows) build_windows ;;
     linux) build_linux ;;
-    *) echo "❌ Tauri desktop builds run on macOS, Windows or Linux (got $(uname -s))"; exit 1 ;;
+    *)
+        echo "❌ Tauri desktop builds run on macOS, Windows or Linux (got $(uname -s))"
+        exit 1
+        ;;
 esac
 
 echo "✅ Build complete!"

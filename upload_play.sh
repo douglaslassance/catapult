@@ -71,7 +71,8 @@ VERSION="$(catapult_version "$VERSION")"
 BUILD_NUMBER="$(git log -1 --format=%ct 2>/dev/null || echo 1)"
 
 if [ -z "$NOTES_FILE" ]; then
-    NOTES_FILE="$(mktemp -t catapult-notes)"
+    # GNU mktemp needs X's in the template, which BSD mktemp -t adds on its own.
+    NOTES_FILE="$(mktemp "${TMPDIR:-/tmp}/catapult-notes.XXXXXX")"
     trap 'rm -f "$NOTES_FILE"' EXIT
 
     RANGE=""

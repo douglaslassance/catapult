@@ -275,9 +275,9 @@ jobs:
         env:
           PACKAGES: ${{ steps.cfg.outputs.linux_packages }}
         run: |
-          read -ra packages <<<"$PACKAGES"
+          read -ra names <<<"$PACKAGES"
           sudo apt-get update
-          sudo apt-get install -y "${packages[@]}"
+          sudo apt-get install -y "${names[@]}"
 
       - name: Select Xcode
         if: runner.os == 'macOS'
@@ -418,7 +418,7 @@ jobs:
         run: ./catapult/release.sh "${{ steps.ver.outputs.version }}" --channels homebrew
 
   appstore:
-    if: contains(inputs.channels, 'appstore') && inputs.platform != 'ios' && inputs.platform != 'desktop'
+    if: contains(inputs.channels, 'appstore') && inputs.platform == 'macos'
     name: Build + upload (Mac App Store)
     runs-on: ${{ inputs.runner }}
     steps:

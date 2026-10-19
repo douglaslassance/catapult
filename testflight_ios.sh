@@ -90,7 +90,8 @@ VERSION="$(catapult_version "$VERSION")"
 # "What to Test" from the commits in this release. Prefer the range between the
 # previous tag and this one; fall back to recent history for an untagged build.
 if [ -z "$NOTES_FILE" ]; then
-    NOTES_FILE="$(mktemp -t catapult-notes)"
+    # GNU mktemp needs X's in the template, which BSD mktemp -t adds on its own.
+    NOTES_FILE="$(mktemp "${TMPDIR:-/tmp}/catapult-notes.XXXXXX")"
     trap 'rm -f "$NOTES_FILE"' EXIT
 
     RANGE=""

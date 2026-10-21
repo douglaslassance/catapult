@@ -95,6 +95,7 @@ swift_target  = "App"                      # SPM target name; resource bundle is
 # package_manager = "pnpm"
 # tauri_dir       = "src-tauri"            # default
 # bundle          = "src-tauri/gen/android/app/build/outputs/bundle/universalRelease/app-universal-release.aab"   # default
+# android_targets = ["aarch64"]            # default all four: aarch64, armv7, i686, x86_64
 #
 # Each platform takes the channel it always takes: [appstore] (plus
 # [testflight]) for iOS and [play] for Android. release.sh builds and publishes

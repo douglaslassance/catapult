@@ -276,7 +276,7 @@ def resolve_groups(client: Client, app_id: str, names: list) -> list:
         "/v1/betaGroups",
         **{
             "filter[app]": app_id,
-            "fields[betaGroups]": "name,isInternalGroup",
+            "fields[betaGroups]": "name,isInternalGroup,hasAccessToAllBuilds",
             "limit": "200",
         },
     )
@@ -299,7 +299,12 @@ def attach_groups(client: Client, build_id: str, groups: list) -> None:
             **{"filter[builds]": build_id, "fields[betaGroups]": "name", "limit": "200"},
         ).get("data", [])
     }
-    todo = [g for g in groups if g["id"] not in current]
+    # A group with access to all builds gets each one from Apple, which answers 422 to adding it by hand.
+    todo = [
+        g
+        for g in groups
+        if g["id"] not in current and not g["attributes"].get("hasAccessToAllBuilds")
+    ]
     if not todo:
         print("✅ Beta groups already attached")
         return

@@ -70,8 +70,13 @@ if [ "$CATAPULT_BUILD_KIND" = "tauri" ]; then
     TAURI_CONFIG="{\"bundle\":{\"android\":{\"versionCode\":${BUILD_NUMBER}}}}"
     [ -n "$VERSION" ] && TAURI_CONFIG="{\"version\":\"${VERSION}\",${TAURI_CONFIG#\{}"
 
+    TARGET_ARGS=()
+    for t in ${CATAPULT_BUILD_ANDROID_TARGETS:-}; do
+        TARGET_ARGS+=(--target "$t")
+    done
+
     echo "📦 Running tauri android build…"
-    catapult_tauri android build --ci --aab --config "$TAURI_CONFIG"
+    catapult_tauri android build --ci --aab "${TARGET_ARGS[@]}" --config "$TAURI_CONFIG"
     echo ""
 else
     if [ ! -x ./gradlew ]; then

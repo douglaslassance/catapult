@@ -580,7 +580,7 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      # tauri android build bundles every Android ABI.
+      # tauri android build bundles every Android ABI unless build.android_targets names fewer.
       - uses: dtolnay/rust-toolchain@stable
         if: steps.cfg.outputs.kind == 'tauri'
         with:

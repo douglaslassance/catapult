@@ -182,11 +182,18 @@ jobs:
           RELEASE_API_TOKEN: ${{ secrets.RELEASE_API_TOKEN }}
         run: ./catapult/release.sh "${{ steps.ver.outputs.version }}" --channels s3
 
+      # A target with app.path builds into its own folder's dist/.
+      - name: Resolve the dist folder
+        id: dist
+        run: |
+          eval "$(python3 catapult/parse_config.py catapult.toml)"
+          echo "path=${CATAPULT_APP_PATH:+$CATAPULT_APP_PATH/}dist" >>"$GITHUB_OUTPUT"
+
       - name: Save artifacts
         uses: actions/upload-artifact@v4
         with:
           name: dist-s3
-          path: dist/
+          path: ${{ steps.dist.outputs.path }}/
           if-no-files-found: error
 
   build-desktop:
@@ -238,6 +245,7 @@ jobs:
             echo "kind=${CATAPULT_BUILD_KIND:-swift}"
             echo "package_manager=${CATAPULT_BUILD_PACKAGE_MANAGER:-npm}"
             echo "linux_packages=${CATAPULT_BUILD_LINUX_PACKAGES:-}"
+            echo "dist=${CATAPULT_APP_PATH:+$CATAPULT_APP_PATH/}dist"
           } >>"$GITHUB_OUTPUT"
 
       - uses: actions/setup-java@v4
@@ -328,7 +336,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: dist-desktop-${{ matrix.os }}
-          path: dist/
+          path: ${{ steps.cfg.outputs.dist }}/
           if-no-files-found: error
 
       # A pre-release or an app without updater artifacts writes no fragment.
@@ -337,7 +345,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: updater-${{ matrix.os }}
-          path: dist/*.updater.json
+          path: ${{ steps.cfg.outputs.dist }}/*.updater.json
           if-no-files-found: ignore
 
   updater-manifest:
@@ -394,10 +402,16 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Resolve the dist folder
+        id: dist
+        run: |
+          eval "$(python3 catapult/parse_config.py catapult.toml)"
+          echo "path=${CATAPULT_APP_PATH:+$CATAPULT_APP_PATH/}dist" >>"$GITHUB_OUTPUT"
+
       - uses: actions/download-artifact@v4
         with:
           name: ${{ inputs.platform == 'desktop' && format('dist-desktop-{0}', inputs.runner) || 'dist-s3' }}
-          path: dist/
+          path: ${{ steps.dist.outputs.path }}/
 
       - name: Resolve version
         id: ver

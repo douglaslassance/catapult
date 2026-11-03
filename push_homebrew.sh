@@ -136,6 +136,8 @@ rm -f ~/Library/Caches/Homebrew/downloads/*"${APP_NAME}"*
 PREVIOUS_TAP_URL=$(git -C "$(brew --repository "$TAP_NAME" 2>/dev/null)" remote get-url origin 2>/dev/null || echo "")
 brew untap --force "$TAP_NAME" 2>/dev/null || true
 brew tap "$TAP_NAME" "$(pwd)"
+# Homebrew 7 refuses to load casks from a third-party tap until it is trusted.
+brew trust --tap "$TAP_NAME"
 
 brew style --fix "$CASK_FILE"
 if ! git diff --quiet "$CASK_FILE"; then

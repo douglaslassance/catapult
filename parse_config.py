@@ -9,10 +9,13 @@ Output convention:
     here; render_plist.py reads the TOML directly for that.
   - A config with [targets.<name>] tables describes several apps in one repo.
     CATAPULT_TARGET picks one, and its tables are merged over the shared ones.
+  - Lists are space-joined, so `--list section.key` prints one item per line
+    instead, for lists whose items may hold spaces.
 
 Requires Python 3.11+ (tomllib).
 """
 
+import argparse
 import os
 import shlex
 import sys
@@ -82,12 +85,34 @@ def load_config(path, target=None):
     return merge(cfg, targets[target])
 
 
+def config_list(cfg, key):
+    """The strings at a dotted key, empty when it is missing and one for a bare string."""
+    value = cfg
+    for part in key.split("."):
+        if not isinstance(value, dict) or part not in value:
+            return []
+        value = value[part]
+    if isinstance(value, str):
+        value = [value]
+    if not isinstance(value, list) or not all(isinstance(x, str) for x in value):
+        fail(f"{key} must be a list of strings")
+    return value
+
+
 def main():
-    path = sys.argv[1] if len(sys.argv) > 1 else "catapult.toml"
-    cfg = load_config(path, os.environ.get("CATAPULT_TARGET"))
+    p = argparse.ArgumentParser(description="Print catapult.toml as shell exports.")
+    p.add_argument("config", nargs="?", default="catapult.toml")
+    p.add_argument("--list", metavar="KEY", help="print the list at a dotted key, one per line")
+    args = p.parse_args()
+    cfg = load_config(args.config, os.environ.get("CATAPULT_TARGET"))
 
     # Windows Python writes CRLF in the ANSI code page, and bash would eval the stray \r into every value.
     sys.stdout.reconfigure(encoding="utf-8", newline="\n")
+
+    if args.list:
+        for item in config_list(cfg, args.list):
+            print(item)
+        return
 
     for section, value in cfg.items():
         if isinstance(value, dict):

@@ -12,9 +12,12 @@
 #   groups = ["Friends"]        # beta group names, exactly as named in ASC
 #   submit_for_review = true    # default true; external groups need it
 #   timeout = 1200              # seconds to wait for processing; default 1200
+#   paths = ["ios", "Shared"]   # what the notes cover; default the app's path
 #
 # "What to Test" is generated from the commit subjects between the previous tag
 # and this release, which assumes the repo writes imperative one-line subjects.
+# Only commits touching paths count, so CI and other targets stay out of it.
+# Paths are relative to catapult.toml, like app.path.
 #
 # Safe to re-run: every step is idempotent, so if processing outruns the timeout
 # you can run this again once the build is ready.
@@ -26,7 +29,7 @@
 #                          [--dry-run] [--force-notes]
 
 if [[ "$1" == "-h" || "$1" == "--help" ]]; then
-    sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,29p' "$0" | sed 's/^# \{0,1\}//'
     exit 0
 fi
 
@@ -101,10 +104,23 @@ if [ -z "$NOTES_FILE" ]; then
         [ -n "$PREV_TAG" ] && RANGE="${PREV_TAG}..${TAG}"
     fi
 
+    # Only commits touching [testflight] paths, else app.path, both relative to catapult.toml.
+    NOTES_PATHS="$("$CATAPULT_PYTHON" "${SCRIPT_DIR}/parse_config.py" "$CATAPULT_CONFIG" --list testflight.paths)"
+    [ -z "$NOTES_PATHS" ] && NOTES_PATHS="${CATAPULT_APP_PATH:-.}"
+    CONFIG_PREFIX="$(git -C "$CATAPULT_CONFIG_DIR" rev-parse --show-prefix)"
+    PATHSPECS=()
+    while IFS= read -r NOTES_PATH; do
+        NOTES_PATH="${NOTES_PATH#./}"
+        NOTES_PATH="${NOTES_PATH%/}"
+        [ "$NOTES_PATH" = "." ] && NOTES_PATH=""
+        # :(top) anchors at the repository root, since we are in the app root; ":(top)." matches nothing.
+        PATHSPECS+=(":(top)${CONFIG_PREFIX}${NOTES_PATH}")
+    done <<<"$NOTES_PATHS"
+
     if [ -n "$RANGE" ]; then
-        git log "$RANGE" --no-merges --format='- %s' >"$NOTES_FILE"
+        git log "$RANGE" --no-merges --format='- %s' -- "${PATHSPECS[@]}" >"$NOTES_FILE"
     else
-        git log -20 --no-merges --format='- %s' >"$NOTES_FILE"
+        git log -20 --no-merges --format='- %s' -- "${PATHSPECS[@]}" >"$NOTES_FILE"
     fi
 
     # The version-bump commit is bookkeeping, not something to test.

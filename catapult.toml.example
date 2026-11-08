@@ -172,11 +172,16 @@ non_exempt_encryption = false
 # groups = ["Friends"]                     # beta group names, exactly as in ASC
 # submit_for_review = true                 # default; external groups require it
 # timeout = 1200                           # seconds to wait for processing
+# paths = ["ios", "Shared"]                # default app.path; relative to this file
 #
 # Without this section catapult uploads the build and stops, leaving you to set
 # "What to Test" and assign groups by hand in App Store Connect. With it,
 # release.sh waits for processing, writes What to Test from the commit subjects
 # since the previous tag, attaches the groups, and submits for Beta App Review.
+#
+# Only commits that touch paths make What to Test, so CI, docs and other
+# targets stay out of it. List any shared code the app builds from beside its
+# own folder.
 #
 # Beta App Review is only skipped for later builds within a version train that
 # was already reviewed. catapult mints a new marketing version per release, so

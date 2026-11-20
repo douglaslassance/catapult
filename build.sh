@@ -51,7 +51,8 @@ mkdir -p "$BUILD_DIR"
 echo ""
 
 echo "📦 Building ${CATAPULT_BUILD_ARCH} binary..."
-swift build -c release --arch "$CATAPULT_BUILD_ARCH"
+# TODO: Drop --build-system native once swiftbuild stops linking with the deployment target as the SDK version (Xcode 27.2).
+swift build -c release --arch "$CATAPULT_BUILD_ARCH" --build-system native
 echo ""
 
 echo "📱 Creating app bundle..."
@@ -60,6 +61,12 @@ mkdir -p "${APP_PATH}/Contents/MacOS" "${APP_PATH}/Contents/Resources"
 BINARY=".build/release/${CATAPULT_BUILD_EXECUTABLE}"
 if [ ! -f "$BINARY" ]; then
     echo "❌ Binary not found: $BINARY"
+    exit 1
+fi
+# macOS keeps an app linked against an older SDK in that SDK's design, so the stamp must match the SDK.
+LINKED_SDK=$(vtool -show-build "$BINARY" | awk '/ sdk /{print $2; exit}')
+if [ "$LINKED_SDK" != "$(xcrun --show-sdk-version)" ]; then
+    echo "❌ $BINARY is stamped with SDK $LINKED_SDK, not $(xcrun --show-sdk-version)" >&2
     exit 1
 fi
 

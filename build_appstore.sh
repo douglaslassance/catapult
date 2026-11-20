@@ -69,7 +69,8 @@ mkdir -p "$CATAPULT_BUILD_DIR"
 echo ""
 
 echo "📦 Building ${CATAPULT_BUILD_ARCH} binary (App Store)..."
-swift build -c release --arch "$CATAPULT_BUILD_ARCH" -Xswiftc -DAPPSTORE_BUILD
+# TODO: Drop --build-system native once swiftbuild stops linking with the deployment target as the SDK version (Xcode 27.2).
+swift build -c release --arch "$CATAPULT_BUILD_ARCH" --build-system native -Xswiftc -DAPPSTORE_BUILD
 echo ""
 
 echo "📱 Creating app bundle..."

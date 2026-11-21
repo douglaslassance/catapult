@@ -315,21 +315,37 @@ def attach_groups(client: Client, build_id: str, groups: list) -> None:
     print(f"✅ Attached group(s): {', '.join(g['attributes']['name'] for g in todo)}")
 
 
-def submit_for_review(client: Client, build_id: str) -> str:
+def warn(message: str) -> None:
+    print(f"⚠️  {message}")
+    if os.environ.get("GITHUB_ACTIONS"):
+        print(f"::warning::{message}")
+
+
+def submit_for_review(client: Client, build_id: str) -> str | None:
+    """None while an earlier build of this version is in review, as Apple takes one at a time."""
     existing = client.get(f"/v1/builds/{build_id}/betaAppReviewSubmission").get("data")
     if existing:
         state = existing["attributes"].get("betaReviewState")
         print(f"✅ Already submitted for Beta App Review (state: {state})")
         return state
-    res = client.post(
-        "/v1/betaAppReviewSubmissions",
-        {
-            "data": {
-                "type": "betaAppReviewSubmissions",
-                "relationships": {"build": {"data": {"type": "builds", "id": build_id}}},
-            }
-        },
-    )
+    try:
+        res = client.post(
+            "/v1/betaAppReviewSubmissions",
+            {
+                "data": {
+                    "type": "betaAppReviewSubmissions",
+                    "relationships": {"build": {"data": {"type": "builds", "id": build_id}}},
+                }
+            },
+        )
+    except ASCError as e:
+        if "HTTP 422" in str(e) and "already in beta review" in str(e).lower():
+            warn(
+                "Uploaded but not submitted for Beta App Review, since an earlier build of this "
+                "version is still in review. Submit this one once that review finishes."
+            )
+            return None
+        raise
     state = res.get("data", {}).get("attributes", {}).get("betaReviewState", "UNKNOWN")
     print(f"✅ Submitted for Beta App Review (state: {state})")
     return state
@@ -406,8 +422,8 @@ def main() -> int:
         attached = False
 
     if external and submit:
-        submit_for_review(client, build_id)
-        if not attached:
+        submitted = submit_for_review(client, build_id) is not None
+        if not attached and submitted:
             attach_groups(client, build_id, groups)
     elif external:
         print(

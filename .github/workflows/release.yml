@@ -81,6 +81,10 @@ on:
         required: false
       INSTALLER_CERT_PASSWORD:
         required: false
+      IOS_DEVELOPMENT_CERT:
+        required: false
+      IOS_DEVELOPMENT_CERT_PASSWORD:
+        required: false
       NOTARIZATION_ISSUER_ID:
         required: false
       NOTARIZATION_KEY:
@@ -545,9 +549,29 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 
-      # No certificate import: build_ios.sh archives with -allowProvisioningUpdates
-      # and the App Store Connect API key, so Xcode manages the distribution cert
-      # and provisioning profile itself.
+      # Xcode creates an Apple Development certificate for any runner without one, until the account reaches its limit.
+      - name: Import the Apple Development certificate
+        env:
+          IOS_DEVELOPMENT_CERT: ${{ secrets.IOS_DEVELOPMENT_CERT }}
+          IOS_DEVELOPMENT_CERT_PASSWORD: ${{ secrets.IOS_DEVELOPMENT_CERT_PASSWORD }}
+        run: |
+          if [ -z "$IOS_DEVELOPMENT_CERT" ]; then
+            echo "No IOS_DEVELOPMENT_CERT, so Xcode creates a development certificate for this run."
+            exit 0
+          fi
+          CERT_FILE=$(mktemp /tmp/ios_development_XXXXXX.p12)
+          echo "$IOS_DEVELOPMENT_CERT" | base64 --decode > "$CERT_FILE"
+          KEYCHAIN_PATH=$(mktemp -d)/build.keychain
+          KEYCHAIN_PASSWORD=$(openssl rand -hex 16)
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_FILE" -P "$IOS_DEVELOPMENT_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          rm -f "$CERT_FILE"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" "$HOME/Library/Keychains/login.keychain-db"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+      # build_ios.sh signs through the App Store Connect API key, so Xcode handles distribution itself.
       - name: Build + upload iOS App Store
         env:
           NOTARIZATION_KEY: ${{ secrets.NOTARIZATION_KEY }}

@@ -350,6 +350,7 @@ full annotated schema, including optional overrides.
 | appstore (CI) | `APPSTORE_CERT`, `APPSTORE_CERT_PASSWORD` | Apple Distribution cert (base64 .p12) |
 | appstore (CI) | `INSTALLER_CERT`, `INSTALLER_CERT_PASSWORD` | Mac Installer Distribution cert |
 | appstore (CI) | `PROVISIONING_PROFILE_B64` | base64 .provisionprofile |
+| appstore (iOS, CI) | `IOS_DEVELOPMENT_CERT`, `IOS_DEVELOPMENT_CERT_PASSWORD` | optional: Apple Development cert (base64 .p12) that archives reuse, so runs stop creating one each |
 | play    | `PLAY_SERVICE_ACCOUNT_JSON` | Google Play service account key (base64 JSON) |
 | play (CI) | `ANDROID_KEYSTORE`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` | upload key (base64 .jks), written to `keystore.properties` |
 | s3 (desktop on Windows) | `WINDOWS_CERTIFICATE`, `WINDOWS_CERTIFICATE_PASSWORD` | optional: Authenticode certificate (base64 .pfx) that signs the MSI |

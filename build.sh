@@ -14,6 +14,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/config.sh"
+source "${SCRIPT_DIR}/app_intents.sh"
 
 # Dispatch by build kind. Swift continues below; Tauri and Compose delegate.
 if [ "$CATAPULT_BUILD_KIND" = "tauri" ]; then
@@ -52,7 +53,8 @@ echo ""
 
 echo "📦 Building ${CATAPULT_BUILD_ARCH} binary..."
 # TODO: Drop --build-system native once swiftbuild stops linking with the deployment target as the SDK version (Xcode 27.2).
-swift build -c release --arch "$CATAPULT_BUILD_ARCH" --build-system native
+app_intents_flags
+swift build -c release --arch "$CATAPULT_BUILD_ARCH" --build-system native "${CATAPULT_APP_INTENTS_FLAGS[@]}"
 echo ""
 
 echo "📱 Creating app bundle..."
@@ -82,6 +84,7 @@ cp "${BUILD_DIR}/AppIcon.icns" "${APP_PATH}/Contents/Resources/"
 [ -f "${BUILD_DIR}/Assets.car" ] && cp "${BUILD_DIR}/Assets.car" "${APP_PATH}/Contents/Resources/"
 [ -f LICENSE ] && cp LICENSE "${APP_PATH}/Contents/Resources/"
 [ -d Licenses ] && cp -R Licenses "${APP_PATH}/Contents/Resources/"
+app_intents_metadata "$APP_PATH"
 
 # SPM resource bundle (Bundle.module support)
 BUNDLE_PATH="${APP_PATH}/Contents/Resources/${CATAPULT_APP_RESOURCE_BUNDLE_NAME}"

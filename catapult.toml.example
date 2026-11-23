@@ -26,6 +26,7 @@ swift_target  = "App"                      # SPM target name; resource bundle is
 # assets                = "Sources/App/Resources/Assets.xcassets"
 # entitlements_direct   = "${name}.entitlements"
 # entitlements_appstore = "${name}-appstore.entitlements"
+# app_intents           = true             # write Metadata.appintents, which Siri and Shortcuts read (swift only)
 # provisioning_profile  = "${name}.provisionprofile"   # filename in ~/Library/MobileDevice/Provisioning Profiles/
 
 # For kind = "tauri", instead of swift_target use:

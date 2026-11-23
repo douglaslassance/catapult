@@ -308,6 +308,7 @@ kind          = "swift"                    # "swift", "tauri", "xcodeproj", "gra
 arch          = "arm64"
 target_triple = "aarch64-apple-darwin"
 swift_target  = "App"                      # SPM target name (swift only)
+# app_intents = true                       # for an app with App Intents: ship the metadata Siri reads (swift only)
 # For Tauri: package_manager = "bun" | "pnpm" | "yarn" | "npm",
 #            platform = "desktop" for Windows and Linux too (no arch or target_triple),
 #            linux_packages = ["libasound2-dev"] for apt packages the Linux build needs
